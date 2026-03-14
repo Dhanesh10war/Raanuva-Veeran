@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
 interface SidebarProps {
+  currentUserId: string;
   isOpen: boolean;
   type: 'chat' | 'participants' | 'polls' | 'qa';
   onClose: () => void;
@@ -26,7 +27,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  isOpen, type, onClose, participants, messages, polls, questions,
+  currentUserId, isOpen, type, onClose, participants, messages, polls, questions,
   onSendMessage, onMuteParticipant, onMuteAll, onLowerAllHands, onRemoveParticipant,
   onCreatePoll, onVotePoll, onAskQuestion, onUpvoteQuestion, onApproveSpeaker, isHost
 }) => {
@@ -246,7 +247,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
 
                 <div className="space-y-4">
-                  {polls.map(poll => (
+                  {polls.map(poll => {
+                    const hasVoted = poll.votedBy?.includes(currentUserId);
+                    return (
                     <div key={poll.id} className="bg-zinc-800/50 border border-zinc-800 p-4 rounded-2xl shadow-sm space-y-3">
                       <h3 className="text-sm font-bold text-white">{poll.question}</h3>
                       <div className="space-y-2">
@@ -256,15 +259,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           return (
                             <button 
                               key={opt.id}
-                              onClick={() => onVotePoll(poll.id, opt.id)}
-                              className="w-full relative h-10 rounded-xl border border-zinc-800 overflow-hidden group hover:border-orange-500/50 transition-all"
+                              disabled={hasVoted}
+                              onClick={() => { if (!hasVoted) onVotePoll(poll.id, opt.id); }}
+                              className={cn(
+                                "w-full relative h-10 rounded-xl border overflow-hidden transition-all",
+                                hasVoted ? "border-zinc-700 cursor-not-allowed opacity-80" : "border-zinc-800 group hover:border-orange-500/50"
+                              )}
                             >
                               <div 
                                 className="absolute inset-y-0 left-0 bg-orange-500/10 transition-all duration-500" 
                                 style={{ width: `${percentage}%` }}
                               />
                               <div className="absolute inset-0 px-3 flex items-center justify-between text-xs">
-                                <span className="font-bold text-zinc-300">{opt.text}</span>
+                                <span className={cn("font-bold text-zinc-300", hasVoted && "text-zinc-400")}>{opt.text}</span>
                                 <span className="text-zinc-500 font-black">{percentage}%</span>
                               </div>
                             </button>
@@ -272,7 +279,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         })}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -283,7 +290,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   Questions ({questions.length})
                 </div>
                 <div className="space-y-4">
-                  {questions.map(q => (
+                  {questions.map(q => {
+                    const hasUpvoted = q.upvotedBy?.includes(currentUserId);
+                    return (
                     <div key={q.id} className="bg-zinc-800/50 border border-zinc-800 p-4 rounded-2xl shadow-sm space-y-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex flex-col">
@@ -291,11 +300,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <p className="text-sm text-zinc-300 font-medium leading-relaxed">{q.text}</p>
                         </div>
                         <button 
-                          onClick={() => onUpvoteQuestion(q.id)}
-                          className="flex flex-col items-center gap-1 p-2 hover:bg-zinc-800 rounded-xl transition-colors group"
+                          disabled={hasUpvoted}
+                          onClick={() => { if (!hasUpvoted) onUpvoteQuestion(q.id); }}
+                          className={cn(
+                            "flex flex-col items-center gap-1 p-2 rounded-xl transition-colors group",
+                            hasUpvoted ? "opacity-50 cursor-not-allowed" : "hover:bg-zinc-800"
+                          )}
                         >
-                          <ThumbsUp className="w-4 h-4 text-zinc-500 group-hover:text-orange-500" />
-                          <span className="text-[10px] font-black text-zinc-500 group-hover:text-orange-500">{q.upvotes}</span>
+                          <ThumbsUp className={cn("w-4 h-4", hasUpvoted ? "text-orange-500" : "text-zinc-500 group-hover:text-orange-500")} />
+                          <span className={cn("text-[10px] font-black", hasUpvoted ? "text-orange-500" : "text-zinc-500 group-hover:text-orange-500")}>{q.upvotes}</span>
                         </button>
                       </div>
                       {q.isAnswered && (
@@ -304,7 +317,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}

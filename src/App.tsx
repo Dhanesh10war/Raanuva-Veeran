@@ -6,11 +6,13 @@
 import { useState, useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { MeetingRoom } from './components/MeetingRoom';
+import { ExitPage } from './components/ExitPage';
 
 export default function App() {
-  const [view, setView] = useState<'dashboard' | 'meeting'>(() => {
-    return (sessionStorage.getItem('view') as 'dashboard' | 'meeting') || 'dashboard';
+  const [view, setView] = useState<'dashboard' | 'meeting' | 'exit'>(() => {
+    return (sessionStorage.getItem('view') as 'dashboard' | 'meeting' | 'exit') || 'dashboard';
   });
+  const [exitReason, setExitReason] = useState<string>('');
   const [roomCode, setRoomCode] = useState(() => {
     return sessionStorage.getItem('roomCode') || '';
   });
@@ -71,8 +73,16 @@ export default function App() {
     }
   };
 
-  const handleLeave = () => {
-    setView('dashboard');
+  const handleLeave = (reason?: string) => {
+    if (reason === 'ended-by-host') {
+      setView('exit');
+      setExitReason('The host has ended the meeting.');
+    } else if (reason === 'removed') {
+      setView('exit');
+      setExitReason('You have been removed from the meeting by the host.');
+    } else {
+      setView('dashboard');
+    }
     setRoomCode('');
     setIsAdmin(false);
     sessionStorage.clear();
@@ -85,6 +95,8 @@ export default function App() {
     <div className="min-h-screen bg-zinc-950 font-sans antialiased text-zinc-100">
       {view === 'dashboard' ? (
         <Dashboard onJoin={handleJoin} onCreate={handleCreate} initialRoomCode={roomCode} />
+      ) : view === 'exit' ? (
+        <ExitPage reason={exitReason} onHome={() => setView('dashboard')} />
       ) : (
         <MeetingRoom 
           roomCode={roomCode} 

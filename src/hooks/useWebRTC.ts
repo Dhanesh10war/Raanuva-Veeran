@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Participant, ChatMessage, Poll, Question } from '../types';
 import { Room, RoomEvent, Track, VideoPresets } from 'livekit-client';
 
-export const useWebRTC = (room: string, userName: string, isAdmin: boolean = false, onMeetingEnd?: () => void) => {
+export const useWebRTC = (room: string, userName: string, isAdmin: boolean = false, onMeetingEnd?: (reason?: string) => void) => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
@@ -67,11 +67,13 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           case 'poll-voted':
             setPolls(prev => prev.map(p => {
               if (p.id === message.pollId) {
+                if (message.userId && p.votedBy?.includes(message.userId)) return p;
                 return {
                   ...p,
                   options: p.options.map(o => 
                     o.id === message.optionId ? { ...o, votes: o.votes + 1 } : o
-                  )
+                  ),
+                  votedBy: [...(p.votedBy || []), message.userId]
                 };
               }
               return p;
@@ -81,12 +83,16 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             setQuestions(prev => [...prev, message.question]);
             break;
           case "question-upvoted":
-            setQuestions(prev => prev.map(q => 
-              q.id === message.questionId ? { ...q, upvotes: q.upvotes + 1 } : q
-            ).sort((a, b) => b.upvotes - a.upvotes));
+            setQuestions(prev => prev.map(q => {
+              if (q.id === message.questionId) {
+                if (message.userId && q.upvotedBy?.includes(message.userId)) return q;
+                return { ...q, upvotes: q.upvotes + 1, upvotedBy: [...(q.upvotedBy || []), message.userId] };
+              }
+              return q;
+            }).sort((a, b) => b.upvotes - a.upvotes));
             break;
           case 'end-meeting':
-            if (onMeetingEndRef.current) onMeetingEndRef.current();
+            if (onMeetingEndRef.current) onMeetingEndRef.current('ended-by-host');
             break;
           case 'toggle-hand':
             syncedStatesRef.current = {
@@ -104,7 +110,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             break;
           case 'remove-participant':
             if (message.targetId === userId.current) {
-               if (onMeetingEndRef.current) onMeetingEndRef.current();
+               if (onMeetingEndRef.current) onMeetingEndRef.current('removed');
             }
             break;
           case 'mute-all':
@@ -179,7 +185,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           body: JSON.stringify({ 
             roomName: room, 
             participantName: userName + (isAdmin ? ' (Teacher)' : ''), 
-            isAdmin 
+            isAdmin,
+            identity: userId.current
           })
         });
         
@@ -229,9 +236,14 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             localMedia = new MediaStream();
             mediaStreamCache.set(lkRoom.localParticipant.identity, localMedia);
           }
+          let localScreenMedia = mediaStreamCache.get(lkRoom.localParticipant.identity + "_screen");
+          if (!localScreenMedia) {
+            localScreenMedia = new MediaStream();
+            mediaStreamCache.set(lkRoom.localParticipant.identity + "_screen", localScreenMedia);
+          }
           
-          // Clear old tracks from localMedia to rebuild fresh, but keep object ref
           localMedia.getTracks().forEach(t => localMedia!.removeTrack(t));
+          localScreenMedia.getTracks().forEach(t => localScreenMedia!.removeTrack(t));
 
           let localVideoOff = true;
           let localAudioOff = true;
@@ -239,15 +251,23 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
 
           lkRoom.localParticipant.videoTrackPublications.forEach((pub: any) => {
             if (pub.track) {
-              localMedia!.addTrack(pub.track.mediaStreamTrack);
-              if (pub.source === Track.Source.Camera) localVideoOff = false;
-              if (pub.source === Track.Source.ScreenShare) localScreenSharing = true;
+              if (pub.source === Track.Source.ScreenShare) {
+                localScreenSharing = true;
+                localScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+              } else if (pub.source === Track.Source.Camera || pub.source === Track.Source.Unknown) {
+                localVideoOff = false;
+                localMedia!.addTrack(pub.track.mediaStreamTrack);
+              }
             }
           });
           lkRoom.localParticipant.audioTrackPublications.forEach((pub: any) => {
-            if (pub.track && pub.source !== Track.Source.ScreenShareAudio) {
-               localMedia!.addTrack(pub.track.mediaStreamTrack);
-               localAudioOff = false;
+            if (pub.track) {
+               if (pub.source === Track.Source.ScreenShareAudio) {
+                 localScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+               } else {
+                 localAudioOff = false;
+                 localMedia!.addTrack(pub.track.mediaStreamTrack);
+               }
             }
           });
 
@@ -263,7 +283,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             isCameraOff: localVideoOff,
             isScreenSharing: localScreenSharing,
             isHandRaised: isHandRaised,
-            stream: localMedia
+            stream: localMedia,
+            screenShareStream: localScreenMedia
           });
 
           // Remote
@@ -273,9 +294,14 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               remoteMedia = new MediaStream();
               mediaStreamCache.set(rp.identity, remoteMedia);
             }
+            let remoteScreenMedia = mediaStreamCache.get(rp.identity + "_screen");
+            if (!remoteScreenMedia) {
+              remoteScreenMedia = new MediaStream();
+              mediaStreamCache.set(rp.identity + "_screen", remoteScreenMedia);
+            }
 
-            // Clear old tracks to rebuild fresh, keep object ref stable
             remoteMedia.getTracks().forEach(t => remoteMedia!.removeTrack(t));
+            remoteScreenMedia.getTracks().forEach(t => remoteScreenMedia!.removeTrack(t));
 
             let videoOff = true;
             let audioOff = true;
@@ -283,15 +309,23 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
 
             rp.videoTrackPublications.forEach((pub: any) => {
               if (pub.track) {
-                remoteMedia!.addTrack(pub.track.mediaStreamTrack);
-                if (pub.source === Track.Source.Camera) videoOff = false;
-                if (pub.source === Track.Source.ScreenShare) screenSharing = true;
+                if (pub.source === Track.Source.ScreenShare) {
+                  screenSharing = true;
+                  remoteScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+                } else if (pub.source === Track.Source.Camera || pub.source === Track.Source.Unknown) {
+                  videoOff = false;
+                  remoteMedia!.addTrack(pub.track.mediaStreamTrack);
+                }
               }
             });
             rp.audioTrackPublications.forEach((pub: any) => {
-               if (pub.track && pub.source !== Track.Source.ScreenShareAudio) {
-                 remoteMedia!.addTrack(pub.track.mediaStreamTrack);
-                 audioOff = false;
+               if (pub.track) {
+                 if (pub.source === Track.Source.ScreenShareAudio) {
+                   remoteScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+                 } else {
+                   audioOff = false;
+                   remoteMedia!.addTrack(pub.track.mediaStreamTrack);
+                 }
                }
             });
 
@@ -310,7 +344,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               isScreenSharing: screenSharing,
               isHandRaised: wsState?.isHandRaised || false,
               isSpeaking: rp.isSpeaking,
-              stream: remoteMedia
+              stream: remoteMedia,
+              screenShareStream: remoteScreenMedia
             });
           });
 
@@ -484,7 +519,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       question,
       options: options.map(o => ({ id: Math.random().toString(36).substr(2, 9), text: o, votes: 0 })),
       isOpen: true,
-      creatorId: userId.current
+      creatorId: userId.current,
+      votedBy: []
     };
     socketRef.current?.send(JSON.stringify({
       type: 'poll-created',
@@ -498,7 +534,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       type: 'poll-voted',
       room,
       pollId,
-      optionId
+      optionId,
+      userId: userId.current
     }));
   };
 
@@ -509,7 +546,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       upvotes: 0,
-      isAnswered: false
+      isAnswered: false,
+      upvotedBy: []
     };
     socketRef.current?.send(JSON.stringify({
       type: 'question-asked',
@@ -522,14 +560,15 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     socketRef.current?.send(JSON.stringify({
       type: 'question-upvoted',
       room,
-      questionId
+      questionId,
+      userId: userId.current
     }));
   };
 
   const endMeeting = () => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'end-meeting', room }));
-    if (onMeetingEndRef.current) onMeetingEndRef.current();
+    if (onMeetingEndRef.current) onMeetingEndRef.current('ended-by-host');
   };
   
   // Admin functionalities to moderate the room
@@ -555,6 +594,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   };
 
   return {
+    currentUserId: userId.current,
     participants,
     messages,
     polls,

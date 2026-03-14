@@ -11,7 +11,7 @@ interface MeetingRoomProps {
   roomCode: string;
   userName: string;
   isAdmin: boolean;
-  onLeave: () => void;
+  onLeave: (reason?: string) => void;
 }
 
 export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, isAdmin, onLeave }) => {
@@ -19,6 +19,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
   const [copied, setCopied] = useState(false);
   
   const {
+    currentUserId,
     participants,
     messages,
     polls,
@@ -170,6 +171,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
         <Sidebar
           isOpen={sidebarType !== null}
           type={sidebarType || 'chat'}
+          currentUserId={currentUserId}
           onClose={() => setSidebarType(null)}
           participants={participants}
           messages={messages}

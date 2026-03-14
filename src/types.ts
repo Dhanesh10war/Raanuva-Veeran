@@ -2,6 +2,7 @@ export interface Participant {
   id: string;
   name: string;
   stream?: MediaStream;
+  screenShareStream?: MediaStream;
   isMuted: boolean;
   isCameraOff: boolean;
   isScreenSharing: boolean;
@@ -26,6 +27,7 @@ export interface Poll {
   options: { id: string; text: string; votes: number }[];
   isOpen: boolean;
   creatorId: string;
+  votedBy?: string[];
 }
 
 export interface Question {
@@ -35,4 +37,5 @@ export interface Question {
   timestamp: string;
   upvotes: number;
   isAnswered: boolean;
+  upvotedBy?: string[];
 }

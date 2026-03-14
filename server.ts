@@ -4,13 +4,14 @@ import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
 import { AccessToken } from "livekit-server-sdk";
 import dotenv from "dotenv";
+import path from "path";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
   app.use(express.json());
 
@@ -34,23 +35,23 @@ async function startServer() {
           const userName = message.name;
           const isAdmin = message.isAdmin;
           const isListener = message.isListener;
-          
+
           if (!rooms.has(currentRoom!)) {
             rooms.set(currentRoom!, new Map());
           }
           rooms.get(currentRoom!)?.set(currentUserId!, { ws, name: userName, isAdmin, isListener });
-          
+
           // Notify others in the room and send existing participants to new joiner
           const existingParticipants: { userId: string, name: string, isAdmin: boolean, isListener: boolean }[] = [];
           rooms.get(currentRoom!)?.forEach((participant, id) => {
             if (id !== currentUserId) {
-              existingParticipants.push({ 
-                userId: id, 
-                name: participant.name, 
+              existingParticipants.push({
+                userId: id,
+                name: participant.name,
                 isAdmin: participant.isAdmin,
-                isListener: (participant as any).isListener 
+                isListener: (participant as any).isListener
               });
-              
+
               if (participant.ws.readyState === WebSocket.OPEN) {
                 participant.ws.send(JSON.stringify({
                   type: "user-joined",
@@ -133,35 +134,35 @@ async function startServer() {
   // LiveKit Token Generation Endpoint
   app.post("/api/livekit-token", async (req, res) => {
     try {
-      const { roomName, participantName, isAdmin } = req.body;
-      
+      const { roomName, participantName, isAdmin, identity } = req.body;
+
       if (!roomName || !participantName) {
         return res.status(400).json({ error: "Missing roomName or participantName" });
       }
 
       const apiKey = process.env.LIVEKIT_API_KEY;
       const apiSecret = process.env.LIVEKIT_API_SECRET;
-      
+
       if (!apiKey || !apiSecret) {
         return res.status(500).json({ error: "LiveKit credentials not configured on server" });
       }
 
       // Generate the token
       const at = new AccessToken(apiKey, apiSecret, {
-        identity: participantName,
+        identity: identity || participantName,
         name: participantName,
       });
-      
+
       // Teachers can publish (send video/audio), Students can only subscribe (watch/listen)
-      at.addGrant({ 
-        roomJoin: true, 
-        room: roomName, 
-        canPublish: isAdmin, 
-        canSubscribe: true 
+      at.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: isAdmin,
+        canSubscribe: true
       });
 
       const token = await at.toJwt();
-      
+
       res.json({ token, url: process.env.LIVEKIT_URL });
     } catch (error) {
       console.error("Error generating token:", error);
@@ -178,6 +179,10 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static("dist"));
+    // SPA catch-all route for production
+    app.get("*", (req, res) => {
+      res.sendFile(path.resolve(process.cwd(), "dist", "index.html"));
+    });
   }
 
   server.listen(PORT, "0.0.0.0", () => {

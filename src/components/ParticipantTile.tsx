@@ -14,10 +14,14 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   useEffect(() => {
-    if (videoRef.current && participant?.stream) {
-      if (videoRef.current.srcObject !== participant.stream) {
-        console.log(`Attaching stream to ${participant.name} tile. Tracks:`, participant.stream.getTracks().map(t => t.kind));
-        videoRef.current.srcObject = participant.stream;
+    const activeStream = participant.isScreenSharing && participant.screenShareStream 
+      ? participant.screenShareStream 
+      : participant.stream;
+
+    if (videoRef.current && activeStream) {
+      if (videoRef.current.srcObject !== activeStream) {
+        console.log(`Attaching stream to ${participant.name} tile. Tracks:`, activeStream.getTracks().map(t => t.kind));
+        videoRef.current.srcObject = activeStream;
         
         const playVideo = async () => {
           try {
@@ -47,7 +51,7 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
         playVideo();
       }
     }
-  }, [participant?.stream, participant?.isCameraOff, participant?.isLocal]);
+  }, [participant?.stream, participant?.screenShareStream, participant?.isScreenSharing, participant?.isCameraOff, participant?.isLocal]);
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,7 +67,7 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
       participant.isHandRaised ? "border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]" : 
       participant.isSpeaking ? "border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)]" : "border-transparent"
     )}>
-      {participant.isCameraOff ? (
+      {participant.isCameraOff && !participant.isScreenSharing ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
           <div className="w-24 h-24 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shadow-inner mb-4">
             <span className="text-4xl font-black text-emerald-500">
