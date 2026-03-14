@@ -178,9 +178,17 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    // Serve static files under the /app/ route 
+    // This matches your vite.config.ts base: '/app/' setting
+    app.use("/app", express.static("dist"));
+    
+    // Redirect root to /app
+    app.get("/", (req, res) => {
+      res.redirect("/app");
+    });
+
     // SPA catch-all route for production
-    app.get("*", (req, res) => {
+    app.get("/app/*", (req, res) => {
       res.sendFile(path.resolve(process.cwd(), "dist", "index.html"));
     });
   }
