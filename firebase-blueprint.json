@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "student": {
+      "title": "Student",
+      "description": "A student registered in the academy platform.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the student." },
+        "name": { "type": "string", "description": "Full name of the student." },
+        "email": { "type": "string", "format": "email", "description": "Email address of the student." },
+        "registeredAt": { "type": "string", "format": "date-time", "description": "When the student registered." }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "meeting": {
+      "title": "Meeting",
+      "description": "A meeting created by a host.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique meeting ID." },
+        "hostUid": { "type": "string", "description": "UID of the meeting host." },
+        "hostName": { "type": "string", "description": "Name of the meeting host." },
+        "title": { "type": "string", "description": "Title of the meeting." },
+        "link": { "type": "string", "description": "Full URL to the meeting." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the meeting was created." },
+        "status": { "type": "string", "enum": ["active", "ended"], "description": "Current status of the meeting." }
+      },
+      "required": ["id", "hostUid", "link", "createdAt"]
+    },
+    "invite": {
+      "title": "Invite",
+      "description": "A notification sent to a student about a meeting.",
+      "type": "object",
+      "properties": {
+        "meetingId": { "type": "string", "description": "ID of the meeting." },
+        "studentEmail": { "type": "string", "format": "email", "description": "Email of the student being invited." },
+        "sentAt": { "type": "string", "format": "date-time", "description": "When the invite was sent." },
+        "status": { "type": "string", "enum": ["sent", "failed"], "description": "Status of the invite." }
+      },
+      "required": ["meetingId", "studentEmail", "sentAt"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": "student",
+      "description": "Collection of all registered students."
+    },
+    "/meetings/{meetingId}": {
+      "schema": "meeting",
+      "description": "Collection of all created meetings."
+    },
+    "/invites/{inviteId}": {
+      "schema": "invite",
+      "description": "History of invites sent to students."
+    }
+  }
+}
