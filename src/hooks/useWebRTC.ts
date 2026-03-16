@@ -32,7 +32,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   // Connect to custom WebSocket for Chat, Polls, Q&A, and Hand Raising
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}`);
+    const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
     socketRef.current = socket;
 
     socket.onopen = () => {
