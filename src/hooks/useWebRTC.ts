@@ -7,12 +7,13 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [isMuted, setIsMuted] = useState(!isAdmin); // Students start muted
-  const [isCameraOff, setIsCameraOff] = useState(!isAdmin); // Students start cam off
+  const [isMuted, setIsMuted] = useState(!isAdmin);
+  const [isCameraOff, setIsCameraOff] = useState(!isAdmin);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isHost, setIsHost] = useState(isAdmin);
   const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
+  const [micAccessGranted, setMicAccessGranted] = useState(false); // True when admin just approved — shows notification
 
   const socketRef = useRef<WebSocket | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
@@ -155,8 +156,11 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               syncParticipantsRef.current();
             }
             if (message.targetId === userId.current && !isAdmin) {
-              // Student was approved to speak — fetch a new token with canPublish: true and reconnect
+              // Student approved — get a canPublish:true token and reconnect silently.
+              // Do NOT auto-enable mic here: browsers block getUserMedia without a user gesture.
+              // The student will click the mic button themselves (real gesture → works).
               setIsApprovedSpeaker(true);
+              setMicAccessGranted(true); // Show notification banner
               (async () => {
                 try {
                   const apiUrl = new URL('/api/livekit-token-refresh', window.location.origin).toString();
@@ -176,8 +180,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
                   if (lkRoom) {
                     await lkRoom.disconnect();
                     await lkRoom.connect(data.url, data.token);
-                    await lkRoom.localParticipant.setMicrophoneEnabled(true);
-                    setIsMuted(false);
+                    // isMuted stays true — student decides when to unmute
                     if (syncParticipantsRef.current) syncParticipantsRef.current();
                   }
                 } catch (err) {
@@ -718,6 +721,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     isHandRaised,
     isHost,
     isApprovedSpeaker,
+    micAccessGranted,
+    dismissMicNotification: () => setMicAccessGranted(false),
     toggleMic,
     toggleCamera,
     toggleScreenShare,

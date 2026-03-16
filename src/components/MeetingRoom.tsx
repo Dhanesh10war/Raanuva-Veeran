@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { Share2, Users, MessageSquare, Hand, ShieldCheck, Video } from 'lucide-react';
+import { Share2, Users, MessageSquare, Hand, ShieldCheck, Video, Mic } from 'lucide-react';
 
 interface MeetingRoomProps {
   roomCode: string;
@@ -44,7 +44,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
     approveSpeaker,
     revokeSpeaker,
     removeParticipant,
-    endMeeting
+    endMeeting,
+    micAccessGranted,
+    dismissMicNotification,
   } = useWebRTC(roomCode, userName, isAdmin, onLeave);
 
   const handleShare = () => {
@@ -89,6 +91,19 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
 
   return (
     <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden text-zinc-100">
+      {/* Mic Access Granted Notification — shown only to approved students */}
+      {micAccessGranted && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-emerald-500 text-zinc-950 rounded-2xl shadow-2xl shadow-emerald-500/30 animate-bounce"
+          style={{ animationIterationCount: 3 }}
+        >
+          <Mic className="w-5 h-5 shrink-0" />
+          <span className="text-sm font-black">You can now speak! Press the mic button below.</span>
+          <button
+            onClick={dismissMicNotification}
+            className="ml-2 text-zinc-800 hover:text-zinc-950 font-bold text-xs"
+          >✕</button>
+        </div>
+      )}
       {/* Header Info */}
       <div className="absolute top-4 left-6 z-20 flex items-center gap-3">
         <div className="bg-zinc-900/80 backdrop-blur-xl px-4 py-2 rounded-2xl border border-zinc-800 flex items-center gap-4 shadow-2xl">
