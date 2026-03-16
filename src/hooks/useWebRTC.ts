@@ -156,37 +156,11 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               syncParticipantsRef.current();
             }
             if (message.targetId === userId.current && !isAdmin) {
-              // Student approved — get a canPublish:true token and reconnect silently.
-              // Do NOT auto-enable mic here: browsers block getUserMedia without a user gesture.
-              // The student will click the mic button themselves (real gesture → works).
               setIsApprovedSpeaker(true);
-              setMicAccessGranted(true); // Show notification banner
-              (async () => {
-                try {
-                  const apiUrl = new URL('/api/livekit-token-refresh', window.location.origin).toString();
-                  const res = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      roomName: room,
-                      participantName: userName,
-                      identity: userId.current,
-                      canPublish: true
-                    })
-                  });
-                  if (!res.ok) throw new Error('Failed to fetch refreshed token');
-                  const data = await res.json();
-                  const lkRoom = livekitRoomRef.current;
-                  if (lkRoom) {
-                    await lkRoom.disconnect();
-                    await lkRoom.connect(data.url, data.token);
-                    // isMuted stays true — student decides when to unmute
-                    if (syncParticipantsRef.current) syncParticipantsRef.current();
-                  }
-                } catch (err) {
-                  console.error('Error reconnecting with publish permissions:', err);
-                }
-              })();
+              setMicAccessGranted(true);
+              // LiveKit SFU permission is granted server-side via RoomServiceClient.updateParticipant.
+              // The LiveKit client SDK automatically receives the permission update — no reconnect needed.
+              // Student just needs to click the mic button (real user gesture).
             }
             break;
           case 'speaker-revoked':
@@ -201,41 +175,17 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               syncParticipantsRef.current();
             }
             if (message.targetId === userId.current && !isAdmin) {
-              // Student's speaking rights revoked — disable publishing and reconnect with canPublish: false
               setIsApprovedSpeaker(false);
-              (async () => {
-                try {
-                  const lkRoom = livekitRoomRef.current;
-                  if (lkRoom) {
-                    // Unpublish all local tracks first
-                    await lkRoom.localParticipant.setMicrophoneEnabled(false);
-                    await lkRoom.localParticipant.setCameraEnabled(false);
-                  }
-                  const apiUrl = new URL('/api/livekit-token-refresh', window.location.origin).toString();
-                  const res = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      roomName: room,
-                      participantName: userName,
-                      identity: userId.current,
-                      canPublish: false
-                    })
-                  });
-                  if (!res.ok) throw new Error('Failed to fetch refreshed token');
-                  const data = await res.json();
-                  if (lkRoom) {
-                    await lkRoom.disconnect();
-                    await lkRoom.connect(data.url, data.token);
-                  }
-                  setIsMuted(true);
-                  setIsCameraOff(true);
-                  setIsScreenSharing(false);
-                  if (syncParticipantsRef.current) syncParticipantsRef.current();
-                } catch (err) {
-                  console.error('Error reconnecting after revocation:', err);
-                }
-              })();
+              // LiveKit SFU permission is revoked server-side. The SDK applies it automatically.
+              // Disable local tracks immediately so the student stops broadcasting.
+              const lkRoom = livekitRoomRef.current;
+              if (lkRoom) {
+                lkRoom.localParticipant.setMicrophoneEnabled(false).catch(() => {});
+                lkRoom.localParticipant.setCameraEnabled(false).catch(() => {});
+              }
+              setIsMuted(true);
+              setIsCameraOff(true);
+              setIsScreenSharing(false);
             }
             break;
           // Additional custom WebSocket logic can go here...

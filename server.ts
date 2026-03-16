@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import dotenv from "dotenv";
 import path from "path";
 
@@ -17,6 +17,14 @@ async function startServer() {
 
   // WebSocket Server for custom signaling (Chat, Polls, Q&A, Hands)
   const wss = new WebSocketServer({ server });
+
+  // LiveKit room service for server-side participant permission management
+  const livekitHost = (process.env.LIVEKIT_URL || '').replace('wss://', 'https://').replace('ws://', 'http://');
+  const roomService = new RoomServiceClient(
+    livekitHost,
+    process.env.LIVEKIT_API_KEY!,
+    process.env.LIVEKIT_API_SECRET!
+  );
 
   // Map to track rooms and their participants: Map<roomName, Map<userId, { ws: WebSocket, name: string, isAdmin: boolean, isListener: boolean }>>
   const rooms = new Map<string, Map<string, { ws: WebSocket, name: string, isAdmin: boolean, isListener: boolean }>>();
@@ -75,8 +83,6 @@ async function startServer() {
         case "remote-mute":
         case "mute-all":
         case "lower-all-hands":
-        case "speaker-approved":
-        case "speaker-revoked":
         case "poll-created":
         case "poll-voted":
         case "question-asked":
@@ -85,6 +91,34 @@ async function startServer() {
         case "remove-participant":
           // Broadcast to everyone in the room
           if (currentRoom) {
+            rooms.get(currentRoom)?.forEach((participant) => {
+              if (participant.ws.readyState === WebSocket.OPEN) {
+                participant.ws.send(JSON.stringify(message));
+              }
+            });
+          }
+          break;
+
+        case "speaker-approved":
+          // Grant canPublish in LiveKit SFU, then broadcast to all clients
+          if (currentRoom && message.targetId) {
+            roomService.updateParticipant(currentRoom, message.targetId, {
+              permission: { canPublish: true, canSubscribe: true, canPublishData: true }
+            }).catch((err: any) => console.warn('LiveKit updateParticipant (approve) failed:', err.message));
+            rooms.get(currentRoom)?.forEach((participant) => {
+              if (participant.ws.readyState === WebSocket.OPEN) {
+                participant.ws.send(JSON.stringify(message));
+              }
+            });
+          }
+          break;
+
+        case "speaker-revoked":
+          // Revoke canPublish in LiveKit SFU, then broadcast to all clients
+          if (currentRoom && message.targetId) {
+            roomService.updateParticipant(currentRoom, message.targetId, {
+              permission: { canPublish: false, canSubscribe: true, canPublishData: true }
+            }).catch((err: any) => console.warn('LiveKit updateParticipant (revoke) failed:', err.message));
             rooms.get(currentRoom)?.forEach((participant) => {
               if (participant.ws.readyState === WebSocket.OPEN) {
                 participant.ws.send(JSON.stringify(message));

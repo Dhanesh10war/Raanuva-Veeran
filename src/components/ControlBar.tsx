@@ -48,18 +48,22 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 
       {/* Center Controls */}
       <div className="flex items-center gap-3">
-        {canStream && (
-          <>
-            <button 
-              onClick={onToggleMic}
-              className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90",
-                isMuted ? "bg-red-500 hover:bg-red-600" : "bg-zinc-800 hover:bg-zinc-700"
-              )}
-            >
-              {isMuted ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
-            </button>
+      {/* Mic button — shown for ALL streaming participants */}
+        {(isAdmin || isApprovedSpeaker) && (
+          <button 
+            onClick={onToggleMic}
+            className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90",
+              isMuted ? "bg-red-500 hover:bg-red-600" : "bg-zinc-800 hover:bg-zinc-700"
+            )}
+          >
+            {isMuted ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
+          </button>
+        )}
 
+        {/* Camera + Screen Share — admin only */}
+        {isAdmin && (
+          <>
             <button 
               onClick={onToggleCamera}
               className={cn(
