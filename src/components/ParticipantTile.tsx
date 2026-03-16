@@ -84,11 +84,7 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
           autoPlay
           playsInline
           muted={participant.isLocal}
-          style={{ imageRendering: 'high-quality', willChange: 'transform' }}
-          className={cn(
-            "w-full h-full object-contain bg-zinc-900",
-            participant.isLocal && "scale-x-[-1]"
-          )}
+          className={cn("w-full h-full object-cover", participant.isLocal && "scale-x-[-1]")}
         />
       )}
 

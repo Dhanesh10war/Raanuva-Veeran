@@ -7,77 +7,29 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [isMuted, setIsMuted] = useState(true);
-  const [isCameraOff, setIsCameraOff] = useState(!isAdmin);
+  const [isMuted, setIsMuted] = useState(!isAdmin); // Students start muted
+  const [isCameraOff, setIsCameraOff] = useState(!isAdmin); // Students start cam off
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isHost, setIsHost] = useState(isAdmin);
-  // Whether THIS student has been granted live mic access by the admin
-  const [isMicGranted, setIsMicGranted] = useState(isAdmin);
 
   const socketRef = useRef<WebSocket | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
   const userId = useRef(Math.random().toString(36).substr(2, 9));
   const onMeetingEndRef = useRef(onMeetingEnd);
-  // Keep track of current room/userName for reconnect inside WebSocket handler
-  const roomRef = useRef(room);
-  const userNameRef = useRef(userName);
 
   // States synced via WebSocket
-  const syncedStatesRef = useRef<Record<string, { isHandRaised: boolean, isAdmin: boolean, isApprovedSpeaker: boolean, isSpeaking: boolean, isMicGranted?: boolean }>>({});
+  const syncedStatesRef = useRef<Record<string, { isHandRaised: boolean, isAdmin: boolean, isApprovedSpeaker: boolean, isSpeaking: boolean }>>({});
 
   // This function will be defined inside the LiveKit effect, but we need a mutable reference to it
+  // so the WebSocket effect can trigger it when states change.
   const syncParticipantsRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     onMeetingEndRef.current = onMeetingEnd;
   }, [onMeetingEnd]);
 
-  useEffect(() => {
-    roomRef.current = room;
-    userNameRef.current = userName;
-  }, [room, userName]);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Helper: reconnect to LiveKit with a publish-capable (upgraded) token
-  // Called when admin grants a student mic access
-  // ─────────────────────────────────────────────────────────────────────────────
-  const reconnectWithMicAccess = useCallback(async () => {
-    const lk = livekitRoomRef.current;
-    if (!lk) return;
-
-    try {
-      const apiUrl = new URL('/api/livekit-token-upgrade', window.location.origin).toString();
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomName: roomRef.current,
-          participantName: userNameRef.current,
-          identity: userId.current
-        })
-      });
-
-      if (!res.ok) throw new Error('Failed to fetch upgrade token');
-      const data = await res.json();
-
-      // Disconnect from LiveKit and reconnect with the new token that allows publishing
-      await lk.disconnect();
-      await lk.connect(data.url, data.token);
-
-      // Enable mic immediately after reconnect
-      await lk.localParticipant.setMicrophoneEnabled(true);
-      setIsMuted(false);
-
-      if (syncParticipantsRef.current) syncParticipantsRef.current();
-    } catch (err) {
-      console.error('Mic upgrade reconnect failed:', err);
-    }
-  }, []);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // WebSocket: Chat, Polls, Q&A, Hand Raising, Mic Grants
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Connect to custom WebSocket for Chat, Polls, Q&A, and Hand Raising
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -150,7 +102,11 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
                 isHandRaised: message.isHandRaised
               }
             };
-            if (syncParticipantsRef.current) syncParticipantsRef.current();
+
+            // Trigger LiveKit sync to update UI
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
             break;
           case 'remove-participant':
             if (message.targetId === userId.current) {
@@ -160,14 +116,18 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           case 'mute-all':
             if (!isAdmin && livekitRoomRef.current) {
               const localAudio = Array.from(livekitRoomRef.current.localParticipant.audioTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Microphone);
-              if (localAudio && localAudio.track) localAudio.track.mute();
+              if (localAudio && localAudio.track) {
+                localAudio.track.mute();
+              }
               setIsMuted(true);
             }
             break;
           case 'remote-mute':
             if (message.targetId === userId.current && livekitRoomRef.current) {
               const localAudio = Array.from(livekitRoomRef.current.localParticipant.audioTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Microphone);
-              if (localAudio && localAudio.track) localAudio.track.mute();
+              if (localAudio && localAudio.track) {
+                localAudio.track.mute();
+              }
               setIsMuted(true);
             }
             break;
@@ -178,7 +138,9 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               resetHands[id] = { ...syncedStatesRef.current[id], isHandRaised: false };
             });
             syncedStatesRef.current = resetHands;
-            if (syncParticipantsRef.current) syncParticipantsRef.current();
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
             break;
           case 'speaker-approved':
             syncedStatesRef.current = {
@@ -188,67 +150,33 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
                 isApprovedSpeaker: message.isApproved
               }
             };
-            if (syncParticipantsRef.current) syncParticipantsRef.current();
-            break;
-
-          // ── NEW: Admin grants a student real microphone access ──
-          case 'grant-mic':
-            // Update synced state so UI reflects the grant
-            syncedStatesRef.current = {
-              ...syncedStatesRef.current,
-              [message.targetId]: {
-                ...syncedStatesRef.current[message.targetId],
-                isMicGranted: true,
-                isApprovedSpeaker: true
-              }
-            };
-            if (syncParticipantsRef.current) syncParticipantsRef.current();
-
-            if (message.targetId === userId.current && !isAdmin) {
-              // This student was granted mic access — reconnect with a publish token
-              setIsMicGranted(true);
-              await reconnectWithMicAccess();
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
+            if (message.targetId === userId.current) {
+              // User approved visually in the UI. 
+              // Future improvement: Trigger a reconnect to LiveKit with a new token that has `canPublish: true`.
+              console.log("Approved to speak by Host.");
             }
             break;
-
-          // ── NEW: Admin revokes a student's microphone access ──
-          case 'revoke-mic':
-            syncedStatesRef.current = {
-              ...syncedStatesRef.current,
-              [message.targetId]: {
-                ...syncedStatesRef.current[message.targetId],
-                isMicGranted: false,
-                isApprovedSpeaker: false
-              }
-            };
-            if (syncParticipantsRef.current) syncParticipantsRef.current();
-
-            if (message.targetId === userId.current && !isAdmin && livekitRoomRef.current) {
-              // Mute and disable mic for this student
-              const localAudio = Array.from(
-                livekitRoomRef.current.localParticipant.audioTrackPublications.values() as IterableIterator<any>
-              ).find(p => p.source === Track.Source.Microphone);
-              if (localAudio && localAudio.track) localAudio.track.mute();
-              await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(false);
-              setIsMuted(true);
-              setIsMicGranted(false);
-            }
-            break;
+          // Additional custom WebSocket logic can go here...
         }
       } catch (e) { }
     };
 
-    return () => { socket.close(); };
-  }, [room, userName, isAdmin, reconnectWithMicAccess]);
+    return () => {
+      socket.close();
+    };
+  }, [room, userName, isAdmin]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // LiveKit Room — 4K video quality
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Connect to LiveKit Room
   useEffect(() => {
     let active = true;
 
     const connectToLiveKit = async () => {
       try {
+        // Fix: Use an absolute URL for the API call to ensure it works properly regardless of current route
+        // We'll construct the full URL
         const apiUrl = new URL('/api/livekit-token', window.location.origin).toString();
 
         const res = await fetch(apiUrl, {
@@ -263,43 +191,35 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         });
 
         if (!res.ok) throw new Error('Failed to fetch LiveKit token');
+
         const data = await res.json();
+
+        // If unmounted while fetching, abort
         if (!active) return;
 
         const livekitUrl = data.url;
         const token = data.token;
 
         const lkRoom = new Room({
-          // Adaptive stream sharpness based on pixel density
-          adaptiveStream: { pixelDensity: 'screen' },
+          adaptiveStream: { pixelDensity: 'screen' }, // Optimize for sharpness
           dynacast: true,
-          // ── Request highest possible resolution from the camera hardware ──
           videoCaptureDefaults: {
-            resolution: VideoPresets.h2160.resolution, // 4K target (falls back gracefully)
-            facingMode: 'user',
+            resolution: VideoPresets.h1080.resolution,
           },
           publishDefaults: {
-            videoCodec: 'vp9', // More efficient at high resolutions than VP8
-            // Simulcast: viewers on slower connections get lower layers
+            videoCodec: 'vp8',
             videoSimulcastLayers: [
+              VideoPresets.h360,
               VideoPresets.h720,
               VideoPresets.h1080,
-              VideoPresets.h2160,
             ],
+            // Ensure simulcast is enabled so it scales up to 1080p
             simulcast: true,
-            // Primary encoding: maximum quality for the full-resolution recipient
+            // Force primary encoding to be 1080p with high bitrate
             videoEncoding: {
-              maxBitrate: 20_000_000, // 20 Mbps for 4K
+              maxBitrate: 3_000_000, // 3 Mbps
               maxFramerate: 30,
-              priority: 'high',
-            },
-            // Screen share — crisp text needs high bitrate
-            screenShareEncoding: {
-              maxBitrate: 15_000_000, // 15 Mbps
-              maxFramerate: 30,
-              priority: 'high',
-            },
-            backupCodec: true, // Fallback if VP9 not supported
+            }
           }
         });
         livekitRoomRef.current = lkRoom;
@@ -351,6 +271,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             }
           });
 
+          // Only add self if publishing (or if Teacher)
           allParticipants.push({
             id: lkRoom.localParticipant.identity,
             name: lkRoom.localParticipant.name || userName,
@@ -358,7 +279,6 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             isHost: isAdmin,
             isListener: !isAdmin,
             isApprovedSpeaker: isAdmin,
-            isMicGranted: isAdmin,
             isMuted: localAudioOff,
             isCameraOff: localVideoOff,
             isScreenSharing: localScreenSharing,
@@ -409,6 +329,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               }
             });
 
+            // Merge synced states from WebSocket using the ref to always get latest without re-running effect
             const wsState = syncedStatesRef.current[rp.identity];
 
             allParticipants.push({
@@ -417,8 +338,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               isLocal: false,
               isHost: rp.name?.includes('(Teacher)') || false,
               isListener: !rp.name?.includes('(Teacher)'),
-              isApprovedSpeaker: rp.name?.includes('(Teacher)') || wsState?.isApprovedSpeaker || false,
-              isMicGranted: rp.name?.includes('(Teacher)') || wsState?.isMicGranted || false,
+              isApprovedSpeaker: rp.name?.includes('(Teacher)') || false,
               isMuted: audioOff,
               isCameraOff: videoOff,
               isScreenSharing: screenSharing,
@@ -429,22 +349,22 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             });
           });
 
-          // WebSocket-only participants (no LiveKit track yet)
+          // Handle WebSocket-only participants (e.g. Students who joined chat but don't have LiveKit tracks)
           Object.keys(syncedStatesRef.current).forEach(wsUserId => {
+            // If they aren't already in the list (because they aren't publishing anything to LiveKit)
             if (!allParticipants.find(p => p.id === wsUserId) && wsUserId !== userId.current) {
               allParticipants.push({
                 id: wsUserId,
-                name: (syncedStatesRef.current[wsUserId] as any).name || 'Student',
+                name: syncedStatesRef.current[wsUserId].name || 'Student',
                 isLocal: false,
                 isHost: false,
                 isListener: true,
                 isApprovedSpeaker: false,
-                isMicGranted: false,
                 isMuted: true,
                 isCameraOff: true,
                 isScreenSharing: false,
                 isHandRaised: syncedStatesRef.current[wsUserId].isHandRaised || false,
-                stream: new MediaStream()
+                stream: new MediaStream() // Empty stream for UI consistency
               });
             }
           });
@@ -452,9 +372,13 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           setParticipants(allParticipants);
         };
 
+        // Save to global ref so WebSocket can trigger it
         syncParticipantsRef.current = syncParticipants;
+
+        // Trigger a sync manually if states changed
         syncParticipants();
 
+        // Event listeners
         lkRoom.on(RoomEvent.TrackSubscribed, syncParticipants);
         lkRoom.on(RoomEvent.TrackUnsubscribed, syncParticipants);
         lkRoom.on(RoomEvent.LocalTrackPublished, syncParticipants);
@@ -466,6 +390,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         await lkRoom.connect(livekitUrl, token);
 
         if (isAdmin) {
+          // Auto publish teacher camera and mic
           await lkRoom.localParticipant.enableCameraAndMicrophone();
           setIsMuted(false);
           setIsCameraOff(false);
@@ -487,16 +412,14 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     };
   }, [room, userName, isAdmin]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Controls
-  // ─────────────────────────────────────────────────────────────────────────────
   const toggleMic = async () => {
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
 
-    // Only admin or mic-granted students can toggle mic
-    if (!isAdmin && !isMicGranted) return;
+    // Check if we are allowed to publish (Teacher or Approved Speaker)
+    if (!isAdmin) return;
 
+    // Find local audio track
     let localAudioPub = Array.from(lk.localParticipant.audioTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Microphone);
 
     if (localAudioPub && localAudioPub.track) {
@@ -507,6 +430,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       }
       setIsMuted(!isMuted);
     } else if (isMuted) {
+      // Create and publish
       await lk.localParticipant.setMicrophoneEnabled(true);
       setIsMuted(false);
     }
@@ -515,6 +439,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const toggleCamera = async () => {
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
+
     if (!isAdmin) return;
 
     let localVideoPub = Array.from(lk.localParticipant.videoTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Camera);
@@ -535,6 +460,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const toggleScreenShare = async () => {
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
+
     if (!isAdmin) return;
 
     if (isScreenSharing) {
@@ -553,12 +479,18 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-    socketRef.current?.send(JSON.stringify({ type: 'chat', room, message }));
+    socketRef.current?.send(JSON.stringify({
+      type: 'chat',
+      room,
+      message
+    }));
   };
 
   const toggleHandRaise = () => {
     const newState = !isHandRaised;
     setIsHandRaised(newState);
+
+    // Update local state Ref for ourselves
     syncedStatesRef.current = {
       ...syncedStatesRef.current,
       [userId.current]: {
@@ -566,7 +498,12 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         isHandRaised: newState
       }
     };
-    if (syncParticipantsRef.current) syncParticipantsRef.current();
+
+    // Trigger LiveKit sync to update UI
+    if (syncParticipantsRef.current) {
+      syncParticipantsRef.current();
+    }
+
     socketRef.current?.send(JSON.stringify({
       type: 'toggle-hand',
       room,
@@ -585,11 +522,21 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       creatorId: userId.current,
       votedBy: []
     };
-    socketRef.current?.send(JSON.stringify({ type: 'poll-created', room, poll }));
+    socketRef.current?.send(JSON.stringify({
+      type: 'poll-created',
+      room,
+      poll
+    }));
   };
 
   const votePoll = (pollId: string, optionId: string) => {
-    socketRef.current?.send(JSON.stringify({ type: 'poll-voted', room, pollId, optionId, userId: userId.current }));
+    socketRef.current?.send(JSON.stringify({
+      type: 'poll-voted',
+      room,
+      pollId,
+      optionId,
+      userId: userId.current
+    }));
   };
 
   const askQuestion = (text: string) => {
@@ -602,11 +549,20 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       isAnswered: false,
       upvotedBy: []
     };
-    socketRef.current?.send(JSON.stringify({ type: 'question-asked', room, question }));
+    socketRef.current?.send(JSON.stringify({
+      type: 'question-asked',
+      room,
+      question
+    }));
   };
 
   const upvoteQuestion = (questionId: string) => {
-    socketRef.current?.send(JSON.stringify({ type: 'question-upvoted', room, questionId, userId: userId.current }));
+    socketRef.current?.send(JSON.stringify({
+      type: 'question-upvoted',
+      room,
+      questionId,
+      userId: userId.current
+    }));
   };
 
   const endMeeting = () => {
@@ -615,41 +571,26 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (onMeetingEndRef.current) onMeetingEndRef.current('ended-by-host');
   };
 
+  // Admin functionalities to moderate the room
   const muteParticipant = (targetId: string) => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'remote-mute', room, targetId }));
   };
-
   const muteAll = () => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'mute-all', room }));
   };
-
   const lowerAllHands = () => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'lower-all-hands', room }));
   };
-
   const approveSpeaker = (targetId: string) => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'speaker-approved', room, targetId, isApproved: true }));
   };
-
   const removeParticipant = (targetId: string) => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'remove-participant', room, targetId }));
-  };
-
-  // ── NEW: Grant a student real mic access (reconnects them with publish token) ──
-  const grantMic = (targetId: string) => {
-    if (!isAdmin) return;
-    socketRef.current?.send(JSON.stringify({ type: 'grant-mic', room, targetId }));
-  };
-
-  // ── NEW: Revoke a student's mic access ──
-  const revokeMic = (targetId: string) => {
-    if (!isAdmin) return;
-    socketRef.current?.send(JSON.stringify({ type: 'revoke-mic', room, targetId }));
   };
 
   return {
@@ -663,7 +604,6 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     isScreenSharing,
     isHandRaised,
     isHost,
-    isMicGranted,
     toggleMic,
     toggleCamera,
     toggleScreenShare,
@@ -678,8 +618,6 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     upvoteQuestion,
     approveSpeaker,
     removeParticipant,
-    grantMic,
-    revokeMic,
     endMeeting
   };
 };

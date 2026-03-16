@@ -5,11 +5,9 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  // On Render (plain Node host) assets are served from root.
-  // Set BASE_URL='/app/' if using a reverse-proxy that expects that path.
-  const base = env.BASE_URL || '/';
   return {
-    base,
+    // This ensures your assets (JS/CSS) are loaded from api.codingboss.in/app/
+    base: '/app/', 
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
@@ -20,6 +18,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // HMR is disabled in AI Studio via DISABLE_HMR env var.
+      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       allowedHosts: true,
     },
