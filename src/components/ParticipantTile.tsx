@@ -67,8 +67,9 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
       participant.isHandRaised ? "border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]" : 
       participant.isSpeaking ? "border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)]" : "border-transparent"
     )}>
-      {participant.isCameraOff && !participant.isScreenSharing ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+      {/* Avatar overlay — shown when camera is off, sits on top of the (hidden) video element */}
+      {participant.isCameraOff && !participant.isScreenSharing && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10">
           <div className="w-24 h-24 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shadow-inner mb-4">
             <span className="text-4xl font-black text-emerald-500">
               {participant.name.charAt(0).toUpperCase()}
@@ -78,18 +79,23 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
             {participant.name}
           </span>
         </div>
-      ) : (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={participant.isLocal}
-          className={cn("w-full h-full object-cover", participant.isLocal && "scale-x-[-1]")}
-          style={!participant.isLocal ? {
-            filter: 'brightness(1.12) contrast(1.05) saturate(1.1)'
-          } : undefined}
-        />
       )}
+
+      {/* Video element — always in the DOM so audio tracks can play even when camera is off */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={participant.isLocal}
+        className={cn(
+          "w-full h-full object-cover",
+          participant.isLocal && "scale-x-[-1]",
+          (participant.isCameraOff && !participant.isScreenSharing) && "invisible"
+        )}
+        style={!participant.isLocal ? {
+          filter: 'brightness(1.12) contrast(1.05) saturate(1.1)'
+        } : undefined}
+      />
 
       {/* Hand Raise Indicator */}
       {participant.isHandRaised && (
