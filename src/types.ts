@@ -12,6 +12,7 @@ export interface Participant {
   isHost?: boolean;
   isListener?: boolean;
   isApprovedSpeaker?: boolean;
+  isMicGranted?: boolean;
 }
 
 export interface ChatMessage {

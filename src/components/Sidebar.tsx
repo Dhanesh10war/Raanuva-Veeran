@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, UserMinus, MicOff, ShieldCheck, Plus, ThumbsUp, CheckCircle2, Hand, VideoOff } from 'lucide-react';
+import { X, Send, UserMinus, MicOff, Mic, ShieldCheck, Plus, ThumbsUp, CheckCircle2, Hand, Radio } from 'lucide-react';
 import { Participant, ChatMessage, Poll, Question } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -23,13 +23,16 @@ interface SidebarProps {
   onAskQuestion: (text: string) => void;
   onUpvoteQuestion: (id: string) => void;
   onApproveSpeaker: (id: string) => void;
+  onGrantMic: (id: string) => void;
+  onRevokeMic: (id: string) => void;
   isHost: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentUserId, isOpen, type, onClose, participants, messages, polls, questions,
   onSendMessage, onMuteParticipant, onMuteAll, onLowerAllHands, onRemoveParticipant,
-  onCreatePoll, onVotePoll, onAskQuestion, onUpvoteQuestion, onApproveSpeaker, isHost
+  onCreatePoll, onVotePoll, onAskQuestion, onUpvoteQuestion, onApproveSpeaker,
+  onGrantMic, onRevokeMic, isHost
 }) => {
   const [inputText, setInputText] = useState('');
   const [newPollQuestion, setNewPollQuestion] = useState('');
@@ -143,9 +146,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <ShieldCheck className="w-3 h-3" /> Meeting host
                           </span>
                         )}
-                        {p.isApprovedSpeaker && !p.isHost && (
-                          <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Approved Speaker
+                        {p.isMicGranted && !p.isHost && (
+                          <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                            <Radio className="w-3 h-3 animate-pulse" /> Mic Active
                           </span>
                         )}
                       </div>
@@ -153,23 +156,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     
                     {isHost && !p.isLocal && (
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {!p.isApprovedSpeaker && (
-                          <button 
-                            onClick={() => onApproveSpeaker(p.id)}
-                            title="Approve to Speak"
-                            className="p-2 hover:bg-emerald-500/10 rounded-lg text-emerald-500 transition-colors"
+                        {/* Grant / Revoke Mic */}
+                        {!p.isMicGranted ? (
+                          <button
+                            onClick={() => onGrantMic(p.id)}
+                            title="Grant Microphone"
+                            className="p-2 hover:bg-emerald-500/10 rounded-lg text-emerald-400 transition-colors"
                           >
-                            <CheckCircle2 className="w-4 h-4" />
+                            <Mic className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => onRevokeMic(p.id)}
+                            title="Revoke Microphone"
+                            className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 transition-colors"
+                          >
+                            <MicOff className="w-4 h-4" />
                           </button>
                         )}
-                        <button 
+                        <button
                           onClick={() => onMuteParticipant(p.id)}
                           title="Mute"
                           className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 transition-colors"
                         >
                           <MicOff className="w-4 h-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => onRemoveParticipant(p.id)}
                           title="Remove"
                           className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors"

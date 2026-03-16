@@ -76,6 +76,8 @@ async function startServer() {
         case "mute-all":
         case "lower-all-hands":
         case "speaker-approved":
+        case "grant-mic":
+        case "revoke-mic":
         case "poll-created":
         case "poll-voted":
         case "question-asked":
@@ -167,6 +169,44 @@ async function startServer() {
     } catch (error) {
       console.error("Error generating token:", error);
       res.status(500).json({ error: "Failed to generate LiveKit token" });
+    }
+  });
+
+  // LiveKit Token Upgrade Endpoint — issues a publish-capable token for approved students
+  app.post("/api/livekit-token-upgrade", async (req, res) => {
+    try {
+      const { roomName, participantName, identity } = req.body;
+
+      if (!roomName || !participantName) {
+        return res.status(400).json({ error: "Missing roomName or participantName" });
+      }
+
+      const apiKey = process.env.LIVEKIT_API_KEY;
+      const apiSecret = process.env.LIVEKIT_API_SECRET;
+
+      if (!apiKey || !apiSecret) {
+        return res.status(500).json({ error: "LiveKit credentials not configured on server" });
+      }
+
+      // Grant full publish rights — admin has approved this student's mic
+      const at = new AccessToken(apiKey, apiSecret, {
+        identity: identity || participantName,
+        name: participantName,
+      });
+
+      at.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: true,       // mic enabled
+        canPublishData: true,
+        canSubscribe: true
+      });
+
+      const token = await at.toJwt();
+      res.json({ token, url: process.env.LIVEKIT_URL });
+    } catch (error) {
+      console.error("Error generating upgrade token:", error);
+      res.status(500).json({ error: "Failed to generate upgrade token" });
     }
   });
 
