@@ -16,7 +16,7 @@ async function startServer() {
   app.use(express.json());
 
   // WebSocket Server for custom signaling (Chat, Polls, Q&A, Hands)
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({ server, path: "/ws" });
 
   // Map to track rooms and their participants: Map<roomName, Map<userId, { ws: WebSocket, name: string, isAdmin: boolean, isListener: boolean }>>
   const rooms = new Map<string, Map<string, { ws: WebSocket, name: string, isAdmin: boolean, isListener: boolean }>>();
