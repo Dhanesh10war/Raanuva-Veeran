@@ -76,6 +76,7 @@ async function startServer() {
         case "mute-all":
         case "lower-all-hands":
         case "speaker-approved":
+        case "speaker-revoked":
         case "poll-created":
         case "poll-voted":
         case "question-asked":
@@ -167,6 +168,42 @@ async function startServer() {
     } catch (error) {
       console.error("Error generating token:", error);
       res.status(500).json({ error: "Failed to generate LiveKit token" });
+    }
+  });
+
+  // LiveKit Token Refresh Endpoint — used when admin grants/revokes mic access
+  app.post("/api/livekit-token-refresh", async (req, res) => {
+    try {
+      const { roomName, participantName, identity, canPublish } = req.body;
+
+      if (!roomName || !participantName || !identity) {
+        return res.status(400).json({ error: "Missing roomName, participantName, or identity" });
+      }
+
+      const apiKey = process.env.LIVEKIT_API_KEY;
+      const apiSecret = process.env.LIVEKIT_API_SECRET;
+
+      if (!apiKey || !apiSecret) {
+        return res.status(500).json({ error: "LiveKit credentials not configured on server" });
+      }
+
+      const at = new AccessToken(apiKey, apiSecret, {
+        identity,
+        name: participantName,
+      });
+
+      at.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: !!canPublish,
+        canSubscribe: true
+      });
+
+      const token = await at.toJwt();
+      res.json({ token, url: process.env.LIVEKIT_URL });
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      res.status(500).json({ error: "Failed to refresh LiveKit token" });
     }
   });
 

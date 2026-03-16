@@ -12,6 +12,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isHost, setIsHost] = useState(isAdmin);
+  const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
@@ -147,16 +148,91 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               ...syncedStatesRef.current,
               [message.targetId]: {
                 ...syncedStatesRef.current[message.targetId],
-                isApprovedSpeaker: message.isApproved
+                isApprovedSpeaker: true
               }
             };
             if (syncParticipantsRef.current) {
               syncParticipantsRef.current();
             }
-            if (message.targetId === userId.current) {
-              // User approved visually in the UI. 
-              // Future improvement: Trigger a reconnect to LiveKit with a new token that has `canPublish: true`.
-              console.log("Approved to speak by Host.");
+            if (message.targetId === userId.current && !isAdmin) {
+              // Student was approved to speak — fetch a new token with canPublish: true and reconnect
+              setIsApprovedSpeaker(true);
+              (async () => {
+                try {
+                  const apiUrl = new URL('/api/livekit-token-refresh', window.location.origin).toString();
+                  const res = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      roomName: room,
+                      participantName: userName,
+                      identity: userId.current,
+                      canPublish: true
+                    })
+                  });
+                  if (!res.ok) throw new Error('Failed to fetch refreshed token');
+                  const data = await res.json();
+                  const lkRoom = livekitRoomRef.current;
+                  if (lkRoom) {
+                    await lkRoom.disconnect();
+                    await lkRoom.connect(data.url, data.token);
+                    await lkRoom.localParticipant.setMicrophoneEnabled(true);
+                    setIsMuted(false);
+                    if (syncParticipantsRef.current) syncParticipantsRef.current();
+                  }
+                } catch (err) {
+                  console.error('Error reconnecting with publish permissions:', err);
+                }
+              })();
+            }
+            break;
+          case 'speaker-revoked':
+            syncedStatesRef.current = {
+              ...syncedStatesRef.current,
+              [message.targetId]: {
+                ...syncedStatesRef.current[message.targetId],
+                isApprovedSpeaker: false
+              }
+            };
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
+            if (message.targetId === userId.current && !isAdmin) {
+              // Student's speaking rights revoked — disable publishing and reconnect with canPublish: false
+              setIsApprovedSpeaker(false);
+              (async () => {
+                try {
+                  const lkRoom = livekitRoomRef.current;
+                  if (lkRoom) {
+                    // Unpublish all local tracks first
+                    await lkRoom.localParticipant.setMicrophoneEnabled(false);
+                    await lkRoom.localParticipant.setCameraEnabled(false);
+                  }
+                  const apiUrl = new URL('/api/livekit-token-refresh', window.location.origin).toString();
+                  const res = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      roomName: room,
+                      participantName: userName,
+                      identity: userId.current,
+                      canPublish: false
+                    })
+                  });
+                  if (!res.ok) throw new Error('Failed to fetch refreshed token');
+                  const data = await res.json();
+                  if (lkRoom) {
+                    await lkRoom.disconnect();
+                    await lkRoom.connect(data.url, data.token);
+                  }
+                  setIsMuted(true);
+                  setIsCameraOff(true);
+                  setIsScreenSharing(false);
+                  if (syncParticipantsRef.current) syncParticipantsRef.current();
+                } catch (err) {
+                  console.error('Error reconnecting after revocation:', err);
+                }
+              })();
             }
             break;
           // Additional custom WebSocket logic can go here...
@@ -201,10 +277,11 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         const token = data.token;
 
         const lkRoom = new Room({
-          adaptiveStream: { pixelDensity: 'screen' }, // Optimize for sharpness
+          adaptiveStream: { pixelDensity: 'screen' },
           dynacast: true,
           videoCaptureDefaults: {
-            resolution: VideoPresets.h1080.resolution,
+            // Use ideal constraint — browser captures best quality it can without forcing 4K overhead
+            resolution: { width: 1920, height: 1080, frameRate: 30 },
           },
           publishDefaults: {
             videoCodec: 'vp8',
@@ -213,11 +290,9 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               VideoPresets.h720,
               VideoPresets.h1080,
             ],
-            // Ensure simulcast is enabled so it scales up to 1080p
             simulcast: true,
-            // Force primary encoding to be 1080p with high bitrate
             videoEncoding: {
-              maxBitrate: 3_000_000, // 3 Mbps
+              maxBitrate: 4_000_000, // 4 Mbps — reliable for 1080p without network strain
               maxFramerate: 30,
             }
           }
@@ -226,7 +301,21 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
 
         const mediaStreamCache = new Map<string, MediaStream>();
 
-        const syncParticipants = () => {
+        // Helper: sync tracks into a MediaStream without removing tracks that are already present.
+        // This prevents MediaStream churn (remove+add) which causes video stutter.
+        const syncTracksIntoStream = (stream: MediaStream, newTracks: MediaStreamTrack[]) => {
+          const currentIds = new Set(stream.getTracks().map(t => t.id));
+          const newIds = new Set(newTracks.map(t => t.id));
+          // Remove tracks that are no longer needed
+          stream.getTracks().forEach(t => { if (!newIds.has(t.id)) stream.removeTrack(t); });
+          // Add only new tracks (skip ones already in the stream)
+          newTracks.forEach(t => { if (!currentIds.has(t.id)) stream.addTrack(t); });
+        };
+
+        // Lightweight speaking state — avoids rebuilding streams when only isSpeaking changes
+        const speakingIdsRef = { current: new Set<string>() };
+
+        const buildParticipantList = () => {
           if (!active) return;
           const allParticipants: Participant[] = [];
 
@@ -242,8 +331,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             mediaStreamCache.set(lkRoom.localParticipant.identity + "_screen", localScreenMedia);
           }
 
-          localMedia.getTracks().forEach(t => localMedia!.removeTrack(t));
-          localScreenMedia.getTracks().forEach(t => localScreenMedia!.removeTrack(t));
+          const localVideoTracks: MediaStreamTrack[] = [];
+          const localScreenVideoTracks: MediaStreamTrack[] = [];
+          const localAudioTracks: MediaStreamTrack[] = [];
+          const localScreenAudioTracks: MediaStreamTrack[] = [];
 
           let localVideoOff = true;
           let localAudioOff = true;
@@ -253,32 +344,34 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             if (pub.track) {
               if (pub.source === Track.Source.ScreenShare) {
                 localScreenSharing = true;
-                localScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+                localScreenVideoTracks.push(pub.track.mediaStreamTrack);
               } else if (pub.source === Track.Source.Camera || pub.source === Track.Source.Unknown) {
                 localVideoOff = false;
-                localMedia!.addTrack(pub.track.mediaStreamTrack);
+                localVideoTracks.push(pub.track.mediaStreamTrack);
               }
             }
           });
           lkRoom.localParticipant.audioTrackPublications.forEach((pub: any) => {
             if (pub.track) {
               if (pub.source === Track.Source.ScreenShareAudio) {
-                localScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+                localScreenAudioTracks.push(pub.track.mediaStreamTrack);
               } else {
                 localAudioOff = false;
-                localMedia!.addTrack(pub.track.mediaStreamTrack);
+                localAudioTracks.push(pub.track.mediaStreamTrack);
               }
             }
           });
 
-          // Only add self if publishing (or if Teacher)
+          syncTracksIntoStream(localMedia, [...localVideoTracks, ...localAudioTracks]);
+          syncTracksIntoStream(localScreenMedia, [...localScreenVideoTracks, ...localScreenAudioTracks]);
+
           allParticipants.push({
             id: lkRoom.localParticipant.identity,
             name: lkRoom.localParticipant.name || userName,
             isLocal: true,
             isHost: isAdmin,
             isListener: !isAdmin,
-            isApprovedSpeaker: isAdmin,
+            isApprovedSpeaker: isAdmin || syncedStatesRef.current[lkRoom.localParticipant.identity]?.isApprovedSpeaker || false,
             isMuted: localAudioOff,
             isCameraOff: localVideoOff,
             isScreenSharing: localScreenSharing,
@@ -300,8 +393,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               mediaStreamCache.set(rp.identity + "_screen", remoteScreenMedia);
             }
 
-            remoteMedia.getTracks().forEach(t => remoteMedia!.removeTrack(t));
-            remoteScreenMedia.getTracks().forEach(t => remoteScreenMedia!.removeTrack(t));
+            const remoteVideoTracks: MediaStreamTrack[] = [];
+            const remoteScreenVideoTracks: MediaStreamTrack[] = [];
+            const remoteAudioTracks: MediaStreamTrack[] = [];
+            const remoteScreenAudioTracks: MediaStreamTrack[] = [];
 
             let videoOff = true;
             let audioOff = true;
@@ -311,25 +406,27 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               if (pub.track) {
                 if (pub.source === Track.Source.ScreenShare) {
                   screenSharing = true;
-                  remoteScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+                  remoteScreenVideoTracks.push(pub.track.mediaStreamTrack);
                 } else if (pub.source === Track.Source.Camera || pub.source === Track.Source.Unknown) {
                   videoOff = false;
-                  remoteMedia!.addTrack(pub.track.mediaStreamTrack);
+                  remoteVideoTracks.push(pub.track.mediaStreamTrack);
                 }
               }
             });
             rp.audioTrackPublications.forEach((pub: any) => {
               if (pub.track) {
                 if (pub.source === Track.Source.ScreenShareAudio) {
-                  remoteScreenMedia!.addTrack(pub.track.mediaStreamTrack);
+                  remoteScreenAudioTracks.push(pub.track.mediaStreamTrack);
                 } else {
                   audioOff = false;
-                  remoteMedia!.addTrack(pub.track.mediaStreamTrack);
+                  remoteAudioTracks.push(pub.track.mediaStreamTrack);
                 }
               }
             });
 
-            // Merge synced states from WebSocket using the ref to always get latest without re-running effect
+            syncTracksIntoStream(remoteMedia, [...remoteVideoTracks, ...remoteAudioTracks]);
+            syncTracksIntoStream(remoteScreenMedia, [...remoteScreenVideoTracks, ...remoteScreenAudioTracks]);
+
             const wsState = syncedStatesRef.current[rp.identity];
 
             allParticipants.push({
@@ -338,20 +435,19 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               isLocal: false,
               isHost: rp.name?.includes('(Teacher)') || false,
               isListener: !rp.name?.includes('(Teacher)'),
-              isApprovedSpeaker: rp.name?.includes('(Teacher)') || false,
+              isApprovedSpeaker: rp.name?.includes('(Teacher)') || wsState?.isApprovedSpeaker || false,
               isMuted: audioOff,
               isCameraOff: videoOff,
               isScreenSharing: screenSharing,
               isHandRaised: wsState?.isHandRaised || false,
-              isSpeaking: rp.isSpeaking,
+              isSpeaking: speakingIdsRef.current.has(rp.identity),
               stream: remoteMedia,
               screenShareStream: remoteScreenMedia
             });
           });
 
-          // Handle WebSocket-only participants (e.g. Students who joined chat but don't have LiveKit tracks)
+          // Handle WebSocket-only participants
           Object.keys(syncedStatesRef.current).forEach(wsUserId => {
-            // If they aren't already in the list (because they aren't publishing anything to LiveKit)
             if (!allParticipants.find(p => p.id === wsUserId) && wsUserId !== userId.current) {
               allParticipants.push({
                 id: wsUserId,
@@ -364,7 +460,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
                 isCameraOff: true,
                 isScreenSharing: false,
                 isHandRaised: syncedStatesRef.current[wsUserId].isHandRaised || false,
-                stream: new MediaStream() // Empty stream for UI consistency
+                stream: new MediaStream()
               });
             }
           });
@@ -372,20 +468,33 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           setParticipants(allParticipants);
         };
 
+        // Lightweight speaking handler — ONLY updates the speaking set and re-renders, never touches streams
+        const handleActiveSpeakers = (speakers: any[]) => {
+          if (!active) return;
+          speakingIdsRef.current = new Set(speakers.map((s: any) => s.identity));
+          // Update only the isSpeaking field without rebuilding streams
+          setParticipants(prev => prev.map(p => ({
+            ...p,
+            isSpeaking: !p.isLocal && speakingIdsRef.current.has(p.id)
+          })));
+        };
+
+        const syncParticipants = buildParticipantList;
+
         // Save to global ref so WebSocket can trigger it
         syncParticipantsRef.current = syncParticipants;
 
-        // Trigger a sync manually if states changed
         syncParticipants();
 
-        // Event listeners
+        // Track/participant events rebuild the full list (needed when streams change)
         lkRoom.on(RoomEvent.TrackSubscribed, syncParticipants);
         lkRoom.on(RoomEvent.TrackUnsubscribed, syncParticipants);
         lkRoom.on(RoomEvent.LocalTrackPublished, syncParticipants);
         lkRoom.on(RoomEvent.LocalTrackUnpublished, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantConnected, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantDisconnected, syncParticipants);
-        lkRoom.on(RoomEvent.ActiveSpeakersChanged, syncParticipants);
+        // Speaking changes use the lightweight handler — no stream rebuilding
+        lkRoom.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
 
         await lkRoom.connect(livekitUrl, token);
 
@@ -417,7 +526,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     const lk = livekitRoomRef.current;
 
     // Check if we are allowed to publish (Teacher or Approved Speaker)
-    if (!isAdmin) return;
+    if (!isAdmin && !isApprovedSpeaker) return;
 
     // Find local audio track
     let localAudioPub = Array.from(lk.localParticipant.audioTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Microphone);
@@ -440,7 +549,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
 
-    if (!isAdmin) return;
+    if (!isAdmin && !isApprovedSpeaker) return;
 
     let localVideoPub = Array.from(lk.localParticipant.videoTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Camera);
 
@@ -461,7 +570,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
 
-    if (!isAdmin) return;
+    if (!isAdmin && !isApprovedSpeaker) return;
 
     if (isScreenSharing) {
       await lk.localParticipant.setScreenShareEnabled(false);
@@ -588,6 +697,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'speaker-approved', room, targetId, isApproved: true }));
   };
+  const revokeSpeaker = (targetId: string) => {
+    if (!isAdmin) return;
+    socketRef.current?.send(JSON.stringify({ type: 'speaker-revoked', room, targetId }));
+  };
   const removeParticipant = (targetId: string) => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'remove-participant', room, targetId }));
@@ -604,6 +717,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     isScreenSharing,
     isHandRaised,
     isHost,
+    isApprovedSpeaker,
     toggleMic,
     toggleCamera,
     toggleScreenShare,
@@ -617,6 +731,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     askQuestion,
     upvoteQuestion,
     approveSpeaker,
+    revokeSpeaker,
     removeParticipant,
     endMeeting
   };

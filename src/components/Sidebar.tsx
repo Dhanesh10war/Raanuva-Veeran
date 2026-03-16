@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, UserMinus, MicOff, ShieldCheck, Plus, ThumbsUp, CheckCircle2, Hand, VideoOff } from 'lucide-react';
+import { X, Send, UserMinus, MicOff, ShieldCheck, Plus, ThumbsUp, CheckCircle2, Hand, VideoOff, XCircle } from 'lucide-react';
 import { Participant, ChatMessage, Poll, Question } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -23,13 +23,14 @@ interface SidebarProps {
   onAskQuestion: (text: string) => void;
   onUpvoteQuestion: (id: string) => void;
   onApproveSpeaker: (id: string) => void;
+  onRevokeSpeaker: (id: string) => void;
   isHost: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentUserId, isOpen, type, onClose, participants, messages, polls, questions,
   onSendMessage, onMuteParticipant, onMuteAll, onLowerAllHands, onRemoveParticipant,
-  onCreatePoll, onVotePoll, onAskQuestion, onUpvoteQuestion, onApproveSpeaker, isHost
+  onCreatePoll, onVotePoll, onAskQuestion, onUpvoteQuestion, onApproveSpeaker, onRevokeSpeaker, isHost
 }) => {
   const [inputText, setInputText] = useState('');
   const [newPollQuestion, setNewPollQuestion] = useState('');
@@ -160,6 +161,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             className="p-2 hover:bg-emerald-500/10 rounded-lg text-emerald-500 transition-colors"
                           >
                             <CheckCircle2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {p.isApprovedSpeaker && !p.isHost && (
+                          <button 
+                            onClick={() => onRevokeSpeaker(p.id)}
+                            title="Revoke Mic Access"
+                            className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
                           </button>
                         )}
                         <button 

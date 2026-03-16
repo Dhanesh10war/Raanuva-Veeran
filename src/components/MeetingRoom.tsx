@@ -42,6 +42,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
     askQuestion,
     upvoteQuestion,
     approveSpeaker,
+    revokeSpeaker,
     removeParticipant,
     endMeeting
   } = useWebRTC(roomCode, userName, isAdmin, onLeave);
@@ -187,6 +188,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
           onAskQuestion={askQuestion}
           onUpvoteQuestion={upvoteQuestion}
           onApproveSpeaker={approveSpeaker}
+          onRevokeSpeaker={revokeSpeaker}
           isHost={isAdmin}
         />
       </div>

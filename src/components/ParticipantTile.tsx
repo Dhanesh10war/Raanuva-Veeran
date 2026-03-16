@@ -85,6 +85,9 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
           playsInline
           muted={participant.isLocal}
           className={cn("w-full h-full object-cover", participant.isLocal && "scale-x-[-1]")}
+          style={!participant.isLocal ? {
+            filter: 'brightness(1.12) contrast(1.05) saturate(1.1)'
+          } : undefined}
         />
       )}
 
