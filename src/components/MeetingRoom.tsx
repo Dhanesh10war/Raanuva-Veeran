@@ -34,6 +34,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
     toggleScreenShare,
     toggleHandRaise,
     muteParticipant,
+    stopVideo,
     muteAll,
     lowerAllHands,
     sendMessage,
@@ -79,14 +80,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
     participants[0],
   [participants]);
 
-  // For a pure live stream experience, we only show the "Stage" (Host + Approved Speakers)
-  // Students will not see themselves or other students in the grid
-  const gridParticipants = useMemo(() => {
-    return participants.filter(p => p.isHost || p.isApprovedSpeaker);
-  }, [participants]);
-
-  // Fallback: If no one is on stage (e.g. admin hasn't joined), show a friendly message or the local user if they are the admin
-  const displayParticipants = gridParticipants.length > 0 ? gridParticipants : participants.filter(p => p.isLocal && p.isHost);
+  // Visibility Rules:
+  // - Admin (isHost) sees themselves (center) + all students who have their camera ON.
+  // - Student sees the Admin (center) + their own video (self). Students NEVER see other students.
+  const displayParticipants = useMemo(() => {
+    if (isAdmin) {
+      // Admin sees themselves and anyone with a camera on or screen sharing
+      return participants.filter(p => p.isLocal || (!p.isCameraOff || p.isScreenSharing));
+    } else {
+      // Student sees Admin and themselves
+      return participants.filter(p => p.isHost || p.isLocal);
+    }
+  }, [participants, isAdmin]);
   
   const otherParticipants = useMemo(() => 
     displayParticipants.filter(p => p.id !== activeSpeaker?.id),
@@ -156,32 +161,69 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-3 md:gap-4 w-full h-full max-w-7xl mx-auto items-center justify-center content-center overflow-y-auto scrollbar-hide py-8">
-              {displayParticipants.map(p => (
-                <div 
-                  key={p.id} 
-                  className={cn(
-                    "transition-all duration-500 ease-in-out relative",
-                    getTileStyles(displayParticipants.length)
-                  )}
-                >
-                  <ParticipantTile participant={p} />
-                  {p.isLocal && p.isHost && p.isCameraOff && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleCamera();
-                        }}
-                        className="pointer-events-auto px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-2xl shadow-2xl shadow-red-600/40 flex items-center gap-2 transition-all active:scale-95"
-                      >
-                        <Video className="w-5 h-5" />
-                        Start Live Stream
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="relative w-full h-full max-w-7xl mx-auto flex items-center justify-center overflow-hidden">
+              <AnimatePresence>
+                {displayParticipants.map((p, index) => {
+                  const isCenterNode = p.isHost; // Admin is the center of gravity
+                  
+                  // For students, orbit around the center
+                  const orbitRadius = 300; 
+                  // Distribute non-admin participants evenly around a circle
+                  const studentIndex = index - (displayParticipants.some(dp => dp.isHost) ? 1 : 0);
+                  const totalStudents = displayParticipants.length - (displayParticipants.some(dp => dp.isHost) ? 1 : 0);
+                  const angle = totalStudents > 0 ? (studentIndex / totalStudents) * 2 * Math.PI : 0;
+                  
+                  // Calculate orbiting relative positions
+                  const orbitX = isCenterNode ? 0 : Math.cos(angle) * orbitRadius;
+                  const orbitY = isCenterNode ? 0 : Math.sin(angle) * orbitRadius;
+
+                  // Active speakers move slightly closer to center and scale up
+                  const speakerOffset = p.isSpeaking ? 0.85 : 1; 
+
+                  return (
+                    <motion.div 
+                      key={p.id} 
+                      layout
+                      initial={{ opacity: 0, scale: 0.5, x: isCenterNode ? 0 : Math.cos(angle) * 500, y: isCenterNode ? 0 : Math.sin(angle) * 500 }}
+                      animate={{ 
+                        opacity: 1, 
+                        scale: isCenterNode ? 1 : (p.isSpeaking ? 0.8 : 0.6), 
+                        x: isCenterNode ? 0 : orbitX * speakerOffset, 
+                        y: isCenterNode ? 0 : orbitY * speakerOffset,
+                        zIndex: isCenterNode ? 40 : (p.isSpeaking ? 30 : 10)
+                      }}
+                      exit={{ opacity: 0, scale: 0, transition: { duration: 0.2 } }}
+                      transition={{ 
+                        type: "spring", 
+                        damping: 25, 
+                        stiffness: 150, 
+                        mass: isCenterNode ? 2 : 1 
+                      }}
+                      className={cn(
+                        "absolute rounded-2xl overflow-hidden shadow-2xl transition-shadow",
+                        isCenterNode ? "w-full max-w-4xl aspect-video ring-4 ring-zinc-800" : "w-80 aspect-video",
+                        p.isSpeaking && !isCenterNode ? "ring-4 ring-indigo-500 shadow-indigo-500/50" : ""
+                      )}
+                    >
+                      <ParticipantTile participant={p} isMain={isCenterNode} />
+                      {p.isLocal && p.isHost && p.isCameraOff && (
+                        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCamera();
+                            }}
+                            className="pointer-events-auto px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-2xl shadow-2xl shadow-red-600/40 flex items-center gap-2 transition-all active:scale-95"
+                          >
+                            <Video className="w-5 h-5" />
+                            Start Live Stream
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
           )}
         </div>
@@ -198,6 +240,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
           questions={questions}
           onSendMessage={sendMessage}
           onMuteParticipant={muteParticipant}
+          onStopVideo={stopVideo}
           onMuteAll={muteAll}
           onLowerAllHands={lowerAllHands}
           onRemoveParticipant={removeParticipant}

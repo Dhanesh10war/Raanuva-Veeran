@@ -135,6 +135,15 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               setIsMuted(true);
             }
             break;
+          case 'remote-video-off':
+            if (message.targetId === userId.current && livekitRoomRef.current) {
+              const localVideo = Array.from(livekitRoomRef.current.localParticipant.videoTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Camera);
+              if (localVideo && localVideo.track) {
+                localVideo.track.mute();
+              }
+              setIsCameraOff(true);
+            }
+            break;
           case 'lower-all-hands':
             setIsHandRaised(false);
             const resetHands: Record<string, any> = {};
@@ -499,10 +508,20 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         lkRoom.on(RoomEvent.LocalTrackUnpublished, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantConnected, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantDisconnected, syncParticipants);
+        // If we are a student, we must manually subscribe ONLY to the Admin's tracks.
+        lkRoom.on(RoomEvent.TrackPublished, (pub, participant) => {
+          if (!isAdmin) {
+            // Subscribe if the participant is a Teacher (Host)
+            if (participant.name?.includes('(Teacher)')) {
+              pub.setSubscribed(true);
+            }
+          }
+        });
+
         // Speaking changes use the lightweight handler — no stream rebuilding
         lkRoom.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
 
-        await lkRoom.connect(livekitUrl, token);
+        await lkRoom.connect(livekitUrl, token, { autoSubscribe: isAdmin });
 
         if (isAdmin) {
           // Auto publish teacher camera and mic
@@ -532,17 +551,13 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       }
     };
     
-    // Only fetch if admin or approved
-    if (isAdmin || isApprovedSpeaker) {
-      fetchDevices();
-      navigator.mediaDevices?.addEventListener('devicechange', fetchDevices);
-    }
+    // Fetch available devices for everyone since anyone can start camera
+    fetchDevices();
+    navigator.mediaDevices?.addEventListener('devicechange', fetchDevices);
 
     return () => {
       active = false;
-      if (isAdmin || isApprovedSpeaker) {
-         navigator.mediaDevices?.removeEventListener('devicechange', fetchDevices);
-      }
+      navigator.mediaDevices?.removeEventListener('devicechange', fetchDevices);
       if (livekitRoomRef.current) {
         livekitRoomRef.current.disconnect();
       }
@@ -553,8 +568,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
 
-    // Check if we are allowed to publish (Teacher or Approved Speaker)
-    if (!isAdmin && !isApprovedSpeaker) return;
+    // Anyone can publish mic now
 
     // Find local audio track
     let localAudioPub = Array.from(lk.localParticipant.audioTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Microphone);
@@ -576,8 +590,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const switchCamera = async (deviceId: string) => {
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
-    
-    if (!isAdmin && !isApprovedSpeaker) return;
+    // Anyone can publish camera now
     
     setActiveCameraId(deviceId);
     
@@ -600,7 +613,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (!livekitRoomRef.current) return;
     const lk = livekitRoomRef.current;
 
-    if (!isAdmin && !isApprovedSpeaker) return;
+    // Anyone can publish camera now
 
     let localVideoPub = Array.from(lk.localParticipant.videoTrackPublications.values() as IterableIterator<any>).find(p => p.source === Track.Source.Camera);
 
@@ -739,6 +752,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'remote-mute', room, targetId }));
   };
+  const stopVideo = (targetId: string) => {
+    if (!isAdmin) return;
+    socketRef.current?.send(JSON.stringify({ type: 'remote-video-off', room, targetId }));
+  };
   const muteAll = () => {
     if (!isAdmin) return;
     socketRef.current?.send(JSON.stringify({ type: 'mute-all', room }));
@@ -782,6 +799,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     toggleScreenShare,
     toggleHandRaise,
     muteParticipant,
+    stopVideo,
     muteAll,
     lowerAllHands,
     sendMessage,

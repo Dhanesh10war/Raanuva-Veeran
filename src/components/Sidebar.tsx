@@ -15,6 +15,7 @@ interface SidebarProps {
   questions: Question[];
   onSendMessage: (text: string) => void;
   onMuteParticipant: (id: string) => void;
+  onStopVideo: (id: string) => void;
   onMuteAll: () => void;
   onLowerAllHands: () => void;
   onRemoveParticipant: (id: string) => void;
@@ -29,7 +30,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentUserId, isOpen, type, onClose, participants, messages, polls, questions,
-  onSendMessage, onMuteParticipant, onMuteAll, onLowerAllHands, onRemoveParticipant,
+  onSendMessage, onMuteParticipant, onStopVideo, onMuteAll, onLowerAllHands, onRemoveParticipant,
   onCreatePoll, onVotePoll, onAskQuestion, onUpvoteQuestion, onApproveSpeaker, onRevokeSpeaker, isHost
 }) => {
   const [inputText, setInputText] = useState('');
@@ -178,6 +179,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 transition-colors"
                         >
                           <MicOff className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => onStopVideo(p.id)}
+                          title="Stop Video"
+                          className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 transition-colors"
+                        >
+                          <VideoOff className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => onRemoveParticipant(p.id)}

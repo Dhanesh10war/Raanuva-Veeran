@@ -81,6 +81,7 @@ async function startServer() {
 
         case "toggle-hand":
         case "remote-mute":
+        case "remote-video-off":
         case "mute-all":
         case "lower-all-hands":
         case "poll-created":
@@ -188,11 +189,11 @@ async function startServer() {
         name: participantName,
       });
 
-      // Teachers can publish (send video/audio), Students can only subscribe (watch/listen)
+      // Teachers and Students can publish (send video/audio), Students can only subscribe (watch/listen)
       at.addGrant({
         roomJoin: true,
         room: roomName,
-        canPublish: isAdmin,
+        canPublish: true, // Allow everyone to publish immediately
         canSubscribe: true
       });
 
