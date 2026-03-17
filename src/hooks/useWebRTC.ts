@@ -14,6 +14,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
   const [isHost, setIsHost] = useState(isAdmin);
   const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
   const [micAccessGranted, setMicAccessGranted] = useState(false); // True when admin just approved — shows notification
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
@@ -188,6 +190,53 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               setIsScreenSharing(false);
             }
             break;
+            
+          case 'user-joined':
+            syncedStatesRef.current = {
+              ...syncedStatesRef.current,
+              [message.userId]: {
+                name: message.name,
+                isAdmin: message.isAdmin,
+                isApprovedSpeaker: false,
+                isHandRaised: false,
+                isSpeaking: false
+              }
+            };
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
+            break;
+
+          case 'participants-list':
+            const newList: any = { ...syncedStatesRef.current };
+            message.participants.forEach((p: any) => {
+              newList[p.userId] = {
+                name: p.name,
+                isAdmin: p.isAdmin,
+                isApprovedSpeaker: newList[p.userId]?.isApprovedSpeaker || false,
+                isHandRaised: newList[p.userId]?.isHandRaised || false,
+                isSpeaking: newList[p.userId]?.isSpeaking || false
+              };
+            });
+            syncedStatesRef.current = newList;
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
+            break;
+
+          case 'user-left':
+            const updatedStates = { ...syncedStatesRef.current };
+            delete updatedStates[message.userId];
+            syncedStatesRef.current = updatedStates;
+            
+            // Also need to explicitly filter out from participants array if they haven't connected to LiveKit
+            setParticipants(prev => prev.filter(p => p.id !== message.userId));
+            
+            if (syncParticipantsRef.current) {
+              syncParticipantsRef.current();
+            }
+            break;
+            
           // Additional custom WebSocket logic can go here...
         }
       } catch (e) { }
@@ -230,7 +279,9 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         const token = data.token;
 
         const lkRoom = new Room({
-          adaptiveStream: { pixelDensity: 'screen' },
+          // We disable adaptiveStream because we are manually attaching MediaStreams to video tags, 
+          // which prevents LiveKit from measuring the video element size, leading to lowest quality simulcast.
+          adaptiveStream: false,
           dynacast: true,
           videoCaptureDefaults: {
             // Use ideal constraint — browser captures best quality it can without forcing 4K overhead
@@ -466,13 +517,35 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
 
     connectToLiveKit();
 
+    // Fetch available devices
+    const fetchDevices = async () => {
+      try {
+        const devices = await Room.getLocalDevices('videoinput');
+        setAvailableCameras(devices);
+        if (devices.length > 0 && !activeCameraId) {
+          setActiveCameraId(devices[0].deviceId);
+        }
+      } catch (error) {
+        console.error("Failed to enumerate devices:", error);
+      }
+    };
+    
+    // Only fetch if admin or approved
+    if (isAdmin || isApprovedSpeaker) {
+      fetchDevices();
+      navigator.mediaDevices?.addEventListener('devicechange', fetchDevices);
+    }
+
     return () => {
       active = false;
+      if (isAdmin || isApprovedSpeaker) {
+         navigator.mediaDevices?.removeEventListener('devicechange', fetchDevices);
+      }
       if (livekitRoomRef.current) {
         livekitRoomRef.current.disconnect();
       }
     };
-  }, [room, userName, isAdmin]);
+  }, [room, userName, isAdmin, isApprovedSpeaker]); // Add isApprovedSpeaker to dependencies so we fetch devices when approved
 
   const toggleMic = async () => {
     if (!livekitRoomRef.current) return;
@@ -495,6 +568,26 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       // Create and publish
       await lk.localParticipant.setMicrophoneEnabled(true);
       setIsMuted(false);
+    }
+  };
+
+  const switchCamera = async (deviceId: string) => {
+    if (!livekitRoomRef.current) return;
+    const lk = livekitRoomRef.current;
+    
+    if (!isAdmin && !isApprovedSpeaker) return;
+    
+    setActiveCameraId(deviceId);
+    
+    try {
+      await lk.switchActiveDevice('videoinput', deviceId);
+      // Ensure the camera stream is enabled if it wasn't already
+      if (isCameraOff) {
+        await lk.localParticipant.setCameraEnabled(true);
+        setIsCameraOff(false);
+      }
+    } catch (err) {
+      console.error("Failed to switch camera:", err);
     }
   };
 
@@ -672,9 +765,12 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
     isHost,
     isApprovedSpeaker,
     micAccessGranted,
+    availableCameras,
+    activeCameraId,
     dismissMicNotification: () => setMicAccessGranted(false),
     toggleMic,
     toggleCamera,
+    switchCamera,
     toggleScreenShare,
     toggleHandRaise,
     muteParticipant,

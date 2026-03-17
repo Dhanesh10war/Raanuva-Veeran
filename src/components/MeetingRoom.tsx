@@ -46,7 +46,10 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
     removeParticipant,
     endMeeting,
     micAccessGranted,
+    availableCameras,
+    activeCameraId,
     dismissMicNotification,
+    switchCamera,
   } = useWebRTC(roomCode, userName, isAdmin, onLeave);
 
   const handleShare = () => {
@@ -231,6 +234,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
         participantCount={participants.length}
         isAdmin={isAdmin}
         isApprovedSpeaker={participants.find(p => p.isLocal)?.isApprovedSpeaker}
+        availableCameras={availableCameras}
+        activeCameraId={activeCameraId}
+        onSwitchCamera={switchCamera}
       />
     </div>
   );

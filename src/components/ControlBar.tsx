@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, ScreenShare, 
-  MessageSquare, Users, PhoneOff, MoreVertical,
+  MessageSquare, Users, PhoneOff,
   Hand, Shield, Settings, BarChart3, HelpCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -28,6 +28,9 @@ interface ControlBarProps {
   participantCount: number;
   isAdmin?: boolean;
   isApprovedSpeaker?: boolean;
+  availableCameras?: MediaDeviceInfo[];
+  activeCameraId?: string | null;
+  onSwitchCamera?: (deviceId: string) => void;
 }
 
 export const ControlBar: React.FC<ControlBarProps> = ({
@@ -35,7 +38,8 @@ export const ControlBar: React.FC<ControlBarProps> = ({
   isChatOpen, isParticipantsOpen, isPollsOpen, isQAOpen,
   onToggleMic, onToggleCamera, onToggleScreenShare, onToggleHandRaise,
   onToggleChat, onToggleParticipants, onTogglePolls, onToggleQA, onLeave,
-  onEndMeeting, participantCount, isAdmin, isApprovedSpeaker
+  onEndMeeting, participantCount, isAdmin, isApprovedSpeaker,
+  availableCameras = [], activeCameraId, onSwitchCamera
 }) => {
   const canStream = isAdmin || isApprovedSpeaker;
 
@@ -64,15 +68,40 @@ export const ControlBar: React.FC<ControlBarProps> = ({
         {/* Camera + Screen Share — admin only */}
         {isAdmin && (
           <>
-            <button 
-              onClick={onToggleCamera}
-              className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90",
-                isCameraOff ? "bg-red-500 hover:bg-red-600" : "bg-zinc-800 hover:bg-zinc-700"
+            <div className="flex items-center gap-2 bg-zinc-800/30 rounded-full pr-3 p-1 border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+              <button 
+                onClick={onToggleCamera}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90",
+                  isCameraOff ? "bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20" : "bg-zinc-800 hover:bg-zinc-700"
+                )}
+                title="Toggle Camera"
+              >
+                {isCameraOff ? <VideoOff className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}
+              </button>
+              
+              {availableCameras.length > 1 && onSwitchCamera && (
+                <div className="relative flex items-center">
+                  <select
+                    value={activeCameraId || ''}
+                    onChange={(e) => onSwitchCamera(e.target.value)}
+                    className="appearance-none bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors text-zinc-300 text-[10px] font-bold tracking-wider uppercase rounded-xl pl-3 pr-8 py-1.5 outline-none cursor-pointer w-32 truncate shadow-inner"
+                    title="Select Camera Device"
+                  >
+                    {availableCameras.map((cam, idx) => (
+                      <option key={cam.deviceId} value={cam.deviceId}>
+                        {cam.label || `Camera ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2 pointer-events-none flex items-center justify-center">
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M1 1L5 5L9 1" stroke="#A1A1AA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
               )}
-            >
-              {isCameraOff ? <VideoOff className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}
-            </button>
+            </div>
 
             <div className="w-px h-6 bg-zinc-800 mx-1" />
 
@@ -95,10 +124,6 @@ export const ControlBar: React.FC<ControlBarProps> = ({
           )}
         >
           <Hand className={cn("w-5 h-5", isHandRaised ? "text-zinc-950" : "text-white")} />
-        </button>
-
-        <button className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-800 hover:bg-zinc-700">
-          <MoreVertical className="w-5 h-5 text-white" />
         </button>
 
         {isAdmin ? (
