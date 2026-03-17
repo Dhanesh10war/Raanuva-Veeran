@@ -161,66 +161,65 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
               </div>
             </div>
           ) : (
-            <div className="relative w-full h-full max-w-7xl mx-auto flex items-center justify-center overflow-hidden pt-16 pb-8">
+            <div className="w-full h-full max-w-[1400px] flex gap-4 p-4 lg:p-6 mx-auto pt-20 pb-4 overflow-hidden">
               <AnimatePresence>
-                {displayParticipants.map((p, index) => {
-                  const isCenterNode = p.isHost; // Admin is the center of gravity
-                  
-                  // For students, place them in a proper anchored grid or corner position
-                  // Let's place the students in the bottom right corner forming a mini-column/grid
-                  const studentIndex = index - (displayParticipants.some(dp => dp.isHost) ? 1 : 0);
-                  const isStudentView = !isAdmin;
+                {/* Admin (Center/Main) */}
+                {displayParticipants.filter(p => p.isHost).map(p => (
+                  <motion.div 
+                    key={p.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                    className="flex-[3] relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-zinc-800"
+                  >
+                    <ParticipantTile participant={p} isMain />
+                    {p.isLocal && p.isCameraOff && (
+                      <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCamera();
+                          }}
+                          className="pointer-events-auto px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-2xl shadow-2xl shadow-red-600/40 flex items-center gap-2 transition-all active:scale-95"
+                        >
+                          <Video className="w-5 h-5" />
+                          Start Live Stream
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
 
-                  return (
-                    <motion.div 
-                      key={p.id} 
-                      layout
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={isCenterNode ? {
-                        // Admin takes the full center
-                        opacity: 1, 
-                        scale: 1, 
-                        x: 0, 
-                        y: 0,
-                        zIndex: 10
-                      } : {
-                        // Students are anchored gracefully to the bottom right
-                        opacity: 1, 
-                        scale: p.isSpeaking ? 1.05 : 1, 
-                        x: "35vw", 
-                        y: `${(studentIndex * 150) - 100}px`,
-                        zIndex: p.isSpeaking ? 30 : 20
-                      }}
-                      exit={{ opacity: 0, scale: 0, transition: { duration: 0.2 } }}
-                      transition={{ 
-                        type: "spring", 
-                        damping: 25, 
-                        stiffness: 150
-                      }}
-                      className={cn(
-                        "absolute rounded-2xl overflow-hidden shadow-2xl transition-shadow",
-                        isCenterNode ? "w-full max-w-4xl aspect-video ring-4 ring-zinc-800" : "w-64 aspect-video",
-                        p.isSpeaking && !isCenterNode ? "ring-4 ring-indigo-500 shadow-indigo-500/50" : ""
-                      )}
-                    >
-                      <ParticipantTile participant={p} isMain={isCenterNode} />
-                      {p.isLocal && p.isHost && p.isCameraOff && (
-                        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleCamera();
-                            }}
-                            className="pointer-events-auto px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-2xl shadow-2xl shadow-red-600/40 flex items-center gap-2 transition-all active:scale-95"
-                          >
-                            <Video className="w-5 h-5" />
-                            Start Live Stream
-                          </button>
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
+                {/* Students (Sidebar column) */}
+                {displayParticipants.filter(p => !p.isHost).length > 0 && (
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-hide shrink-0 min-w-[280px] max-w-[360px] pb-10 pr-2"
+                  >
+                    <AnimatePresence>
+                      {displayParticipants.filter(p => !p.isHost).map(p => (
+                        <motion.div
+                          key={p.id}
+                          layout
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                          className={cn(
+                            "w-full aspect-video rounded-2xl overflow-hidden shadow-lg shrink-0",
+                            p.isSpeaking ? "ring-2 ring-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)]" : "ring-1 ring-zinc-800"
+                          )}
+                        >
+                          <ParticipantTile participant={p} />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           )}
