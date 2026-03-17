@@ -172,7 +172,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                    className="w-full aspect-video lg:aspect-auto lg:h-full lg:flex-[3] relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-zinc-800 shrink-0 lg:shrink min-h-0 lg:min-h-[30vh]"
+                    className="flex-[2] lg:flex-[3] relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-zinc-800 min-h-[30vh]"
                   >
                     <ParticipantTile participant={p} isMain />
                     {p.isLocal && p.isCameraOff && (
