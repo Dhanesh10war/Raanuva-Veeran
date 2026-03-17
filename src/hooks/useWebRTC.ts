@@ -285,7 +285,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           dynacast: true,
           videoCaptureDefaults: {
             // Use ideal constraint — browser captures best quality it can without forcing 4K overhead
-            // Prioritizing sharpness (1080p) for writing pads, with 24fps to save bandwidth
+            // Set contentHint via track publication after it's published to avoid TS errors
             resolution: { width: 1920, height: 1080, frameRate: 24 },
           },
           publishDefaults: {
@@ -298,7 +298,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             ],
             simulcast: true,
             videoEncoding: {
-              maxBitrate: 4_000_000, // 4 Mbps — High quality for sharp text clarity
+              maxBitrate: 5_000_000, // 5 Mbps — Highest quality for matching admin-side clarity
               maxFramerate: 24,
             }
           }
@@ -585,7 +585,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       await lk.switchActiveDevice('videoinput', deviceId);
       // Ensure the camera stream is enabled if it wasn't already
       if (isCameraOff) {
-        await lk.localParticipant.setCameraEnabled(true);
+        const publication = await lk.localParticipant.setCameraEnabled(true);
+        if (publication && publication.track) {
+          (publication.track.mediaStreamTrack as any).contentHint = 'detail';
+        }
         setIsCameraOff(false);
       }
     } catch (err) {
@@ -609,7 +612,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
       }
       setIsCameraOff(!isCameraOff);
     } else if (isCameraOff) {
-      await lk.localParticipant.setCameraEnabled(true);
+      const publication = await lk.localParticipant.setCameraEnabled(true);
+      if (publication && publication.track) {
+        (publication.track.mediaStreamTrack as any).contentHint = 'detail';
+      }
       setIsCameraOff(false);
     }
   };
