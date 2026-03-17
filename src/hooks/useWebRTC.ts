@@ -285,8 +285,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           dynacast: true,
           videoCaptureDefaults: {
             // Use ideal constraint — browser captures best quality it can without forcing 4K overhead
-            // Increased to 1080p 30fps for better quality
-            resolution: { width: 1920, height: 1080, frameRate: 30 },
+            // Balanced at 720p 30fps to fix lagging on Hostinger while keeping good quality
+            resolution: { width: 1280, height: 720, frameRate: 30 },
           },
           publishDefaults: {
             videoCodec: 'vp8',
@@ -294,11 +294,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
               VideoPresets.h180,
               VideoPresets.h360,
               VideoPresets.h720,
-              VideoPresets.h1080,
             ],
             simulcast: true,
             videoEncoding: {
-              maxBitrate: 3_000_000, // 3 Mbps — good balance for 1080p quality
+              maxBitrate: 2_500_000, // 2.5 Mbps — a stable sweet spot for Hostinger
               maxFramerate: 30,
             }
           }
