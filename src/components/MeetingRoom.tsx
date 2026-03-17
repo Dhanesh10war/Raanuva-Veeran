@@ -148,7 +148,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 p-4 md:p-6 flex items-center justify-center overflow-hidden">
           {isScreenSharing ? (
-            <div className="w-full h-full flex flex-col lg:flex-row gap-6">
+            <div className="w-full h-full flex flex-col lg:flex-row gap-6 mt-16">
               <div className="flex-[4] relative">
                 <ParticipantTile participant={activeSpeaker} isMain />
               </div>
@@ -161,47 +161,45 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
               </div>
             </div>
           ) : (
-            <div className="relative w-full h-full max-w-7xl mx-auto flex items-center justify-center overflow-hidden">
+            <div className="relative w-full h-full max-w-7xl mx-auto flex items-center justify-center overflow-hidden pt-16 pb-8">
               <AnimatePresence>
                 {displayParticipants.map((p, index) => {
                   const isCenterNode = p.isHost; // Admin is the center of gravity
                   
-                  // For students, orbit around the center
-                  const orbitRadius = 300; 
-                  // Distribute non-admin participants evenly around a circle
+                  // For students, place them in a proper anchored grid or corner position
+                  // Let's place the students in the bottom right corner forming a mini-column/grid
                   const studentIndex = index - (displayParticipants.some(dp => dp.isHost) ? 1 : 0);
-                  const totalStudents = displayParticipants.length - (displayParticipants.some(dp => dp.isHost) ? 1 : 0);
-                  const angle = totalStudents > 0 ? (studentIndex / totalStudents) * 2 * Math.PI : 0;
-                  
-                  // Calculate orbiting relative positions
-                  const orbitX = isCenterNode ? 0 : Math.cos(angle) * orbitRadius;
-                  const orbitY = isCenterNode ? 0 : Math.sin(angle) * orbitRadius;
-
-                  // Active speakers move slightly closer to center and scale up
-                  const speakerOffset = p.isSpeaking ? 0.85 : 1; 
+                  const isStudentView = !isAdmin;
 
                   return (
                     <motion.div 
                       key={p.id} 
                       layout
-                      initial={{ opacity: 0, scale: 0.5, x: isCenterNode ? 0 : Math.cos(angle) * 500, y: isCenterNode ? 0 : Math.sin(angle) * 500 }}
-                      animate={{ 
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={isCenterNode ? {
+                        // Admin takes the full center
                         opacity: 1, 
-                        scale: isCenterNode ? 1 : (p.isSpeaking ? 0.8 : 0.6), 
-                        x: isCenterNode ? 0 : orbitX * speakerOffset, 
-                        y: isCenterNode ? 0 : orbitY * speakerOffset,
-                        zIndex: isCenterNode ? 40 : (p.isSpeaking ? 30 : 10)
+                        scale: 1, 
+                        x: 0, 
+                        y: 0,
+                        zIndex: 10
+                      } : {
+                        // Students are anchored gracefully to the bottom right
+                        opacity: 1, 
+                        scale: p.isSpeaking ? 1.05 : 1, 
+                        x: "35vw", 
+                        y: `${(studentIndex * 150) - 100}px`,
+                        zIndex: p.isSpeaking ? 30 : 20
                       }}
                       exit={{ opacity: 0, scale: 0, transition: { duration: 0.2 } }}
                       transition={{ 
                         type: "spring", 
                         damping: 25, 
-                        stiffness: 150, 
-                        mass: isCenterNode ? 2 : 1 
+                        stiffness: 150
                       }}
                       className={cn(
                         "absolute rounded-2xl overflow-hidden shadow-2xl transition-shadow",
-                        isCenterNode ? "w-full max-w-4xl aspect-video ring-4 ring-zinc-800" : "w-80 aspect-video",
+                        isCenterNode ? "w-full max-w-4xl aspect-video ring-4 ring-zinc-800" : "w-64 aspect-video",
                         p.isSpeaking && !isCenterNode ? "ring-4 ring-indigo-500 shadow-indigo-500/50" : ""
                       )}
                     >

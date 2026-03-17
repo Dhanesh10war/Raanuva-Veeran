@@ -509,11 +509,11 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         lkRoom.on(RoomEvent.ParticipantConnected, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantDisconnected, syncParticipants);
         // If we are a student, we must manually subscribe ONLY to the Admin's tracks.
-        lkRoom.on(RoomEvent.TrackPublished, (pub, participant) => {
+        lkRoom.on(RoomEvent.TrackPublished, (pub: any, participant) => {
           if (!isAdmin) {
             // Subscribe if the participant is a Teacher (Host)
             if (participant.name?.includes('(Teacher)')) {
-              pub.setSubscribed(true);
+              if (pub.setSubscribed) pub.setSubscribed(true);
             }
           }
         });
@@ -522,6 +522,17 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         lkRoom.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
 
         await lkRoom.connect(livekitUrl, token, { autoSubscribe: isAdmin });
+
+        // Subscribe to existing Teacher tracks if a student joins after the teacher
+        if (!isAdmin) {
+          lkRoom.remoteParticipants.forEach((p) => {
+            if (p.name?.includes('(Teacher)')) {
+              p.getTrackPublications().forEach((pub: any) => {
+                if (pub.setSubscribed) pub.setSubscribed(true);
+              });
+            }
+          });
+        }
 
         if (isAdmin) {
           // Auto publish teacher camera and mic
