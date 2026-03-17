@@ -88,13 +88,17 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
         playsInline
         muted={participant.isLocal}
         className={cn(
-          "w-full h-full object-cover",
+          "w-full h-full",
+          isMain ? "object-contain bg-zinc-950" : "object-cover",
           participant.isLocal && "scale-x-[-1]",
           (participant.isCameraOff && !participant.isScreenSharing) && "invisible"
         )}
-        style={!participant.isLocal ? {
-          filter: 'brightness(1.12) contrast(1.05) saturate(1.1)'
-        } : undefined}
+        style={participant.isHost ? {
+          // Boost lighting for admin heavily 
+          filter: 'brightness(1.25) contrast(1.1) saturate(1.15) drop-shadow(0 0 10px rgba(0,0,0,0.5))'
+        } : (!participant.isLocal ? {
+          filter: 'brightness(1.1) contrast(1.05) saturate(1.05)'
+        } : undefined)}
       />
 
       {/* Hand Raise Indicator */}

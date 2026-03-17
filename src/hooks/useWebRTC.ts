@@ -423,7 +423,10 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
                   screenSharing = true;
                   remoteScreenVideoTracks.push(pub.track.mediaStreamTrack);
                 } else if (pub.source === Track.Source.Camera || pub.source === Track.Source.Unknown) {
-                  videoOff = false;
+                  // A track exists but may be explicitly paused/muted by the student
+                  if (!pub.isMuted && !pub.track.isMuted) {
+                    videoOff = false;
+                  }
                   remoteVideoTracks.push(pub.track.mediaStreamTrack);
                 }
               }
@@ -501,7 +504,8 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
 
         syncParticipants();
 
-        // Track/participant events rebuild the full list (needed when streams change)
+        lkRoom.on(RoomEvent.TrackMuted, syncParticipants);
+        lkRoom.on(RoomEvent.TrackUnmuted, syncParticipants);
         lkRoom.on(RoomEvent.TrackSubscribed, syncParticipants);
         lkRoom.on(RoomEvent.TrackUnsubscribed, syncParticipants);
         lkRoom.on(RoomEvent.LocalTrackPublished, syncParticipants);

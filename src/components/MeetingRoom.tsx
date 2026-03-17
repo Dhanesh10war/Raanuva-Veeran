@@ -161,7 +161,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
               </div>
             </div>
           ) : (
-            <div className="w-full h-full max-w-[1400px] flex gap-4 p-4 lg:p-6 mx-auto pt-20 pb-4 overflow-hidden">
+            <div className="w-full h-full max-w-[1400px] flex flex-col lg:flex-row gap-4 lg:gap-6 p-4 lg:p-6 mx-auto pt-20 pb-4 overflow-hidden">
               <AnimatePresence>
                 {/* Admin (Center/Main) */}
                 {displayParticipants.filter(p => p.isHost).map(p => (
@@ -172,7 +172,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                    className="flex-[3] relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-zinc-800"
+                    className="flex-[2] lg:flex-[3] relative rounded-3xl overflow-hidden bg-black shadow-2xl ring-1 ring-zinc-800 min-h-[30vh]"
                   >
                     <ParticipantTile participant={p} isMain />
                     {p.isLocal && p.isCameraOff && (
@@ -192,13 +192,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
                   </motion.div>
                 ))}
 
-                {/* Students (Sidebar column) */}
+                {/* Students (Sidebar column/row) */}
                 {displayParticipants.filter(p => !p.isHost).length > 0 && (
                   <motion.div 
                     layout
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-hide shrink-0 min-w-[280px] max-w-[360px] pb-10 pr-2"
+                    className="flex-1 lg:flex-[1] flex flex-row lg:flex-col gap-4 overflow-x-auto lg:overflow-y-auto scrollbar-hide shrink-0 w-full lg:w-auto min-w-0 lg:min-w-[280px] lg:max-w-[360px] pb-2 lg:pb-10 pr-2"
                   >
                     <AnimatePresence>
                       {displayParticipants.filter(p => !p.isHost).map(p => (
@@ -210,7 +210,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
                           exit={{ opacity: 0, scale: 0.8 }}
                           transition={{ type: "spring", damping: 25, stiffness: 200 }}
                           className={cn(
-                            "w-full aspect-video rounded-2xl overflow-hidden shadow-lg shrink-0",
+                            "w-48 lg:w-full shrink-0 aspect-video rounded-2xl overflow-hidden shadow-lg",
                             p.isSpeaking ? "ring-2 ring-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)]" : "ring-1 ring-zinc-800"
                           )}
                         >
