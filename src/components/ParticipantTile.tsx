@@ -89,7 +89,7 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
         muted={participant.isLocal}
         className={cn(
           "w-full h-full",
-          isMain ? "object-contain bg-zinc-950" : "object-cover",
+          isMain ? "object-cover lg:object-contain bg-zinc-950" : "object-cover",
           participant.isLocal && "scale-x-[-1]",
           (participant.isCameraOff && !participant.isScreenSharing) && "invisible"
         )}
