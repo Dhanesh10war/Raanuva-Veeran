@@ -284,22 +284,22 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           adaptiveStream: false,
           dynacast: true,
           videoCaptureDefaults: {
-            // Use ideal constraint — browser captures best quality it can without forcing 4K overhead
-            // Set contentHint via track publication after it's published to avoid TS errors
-            resolution: { width: 1920, height: 1080, frameRate: 24 },
+            // 1080p at 30fps — VP9 codec makes this viable without lag
+            resolution: { width: 1920, height: 1080, frameRate: 30 },
           },
           publishDefaults: {
-            videoCodec: 'vp8',
+            // VP9 delivers ~2x better quality than VP8 at the same bitrate,
+            // meaning we get sharp 1080p@30fps without excessive network load.
+            videoCodec: 'vp9',
             videoSimulcastLayers: [
-              VideoPresets.h180,
               VideoPresets.h360,
               VideoPresets.h720,
               VideoPresets.h1080,
             ],
             simulcast: true,
             videoEncoding: {
-              maxBitrate: 5_000_000, // 5 Mbps — Highest quality for matching admin-side clarity
-              maxFramerate: 24,
+              maxBitrate: 3_000_000, // 3 Mbps with VP9 = equivalent to ~6 Mbps with VP8
+              maxFramerate: 30,
             }
           }
         });
