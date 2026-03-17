@@ -279,22 +279,26 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         const token = data.token;
 
         const lkRoom = new Room({
-          adaptiveStream: { pixelDensity: 'screen' },
+          // We disable adaptiveStream because we are manually attaching MediaStreams to video tags, 
+          // which prevents LiveKit from measuring the video element size, leading to lowest quality simulcast.
+          adaptiveStream: false,
           dynacast: true,
           videoCaptureDefaults: {
             // Use ideal constraint — browser captures best quality it can without forcing 4K overhead
+            // Increased to 1080p 30fps for better quality
             resolution: { width: 1920, height: 1080, frameRate: 30 },
           },
           publishDefaults: {
             videoCodec: 'vp8',
             videoSimulcastLayers: [
+              VideoPresets.h180,
               VideoPresets.h360,
               VideoPresets.h720,
               VideoPresets.h1080,
             ],
             simulcast: true,
             videoEncoding: {
-              maxBitrate: 4_000_000, // 4 Mbps — reliable for 1080p without network strain
+              maxBitrate: 3_000_000, // 3 Mbps — good balance for 1080p quality
               maxFramerate: 30,
             }
           }
