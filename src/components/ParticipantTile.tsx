@@ -81,25 +81,34 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
         </div>
       )}
 
-      {/* Video element — always in the DOM so audio tracks can play even when camera is off */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted={participant.isLocal}
-        className={cn(
-          "w-full h-full",
-          isMain ? "object-contain bg-zinc-950" : "object-cover",
-          participant.isLocal && "scale-x-[-1]",
-          (participant.isCameraOff && !participant.isScreenSharing) && "invisible"
-        )}
-        style={participant.isHost ? {
-          // Boost lighting for admin heavily 
-          filter: 'brightness(1.25) contrast(1.1) saturate(1.15) drop-shadow(0 0 10px rgba(0,0,0,0.5))'
-        } : (!participant.isLocal ? {
-          filter: 'brightness(1.1) contrast(1.05) saturate(1.05)'
-        } : undefined)}
-      />
+      {/* Media element — use audio when camera is off to prevent hitting browser hardware decoder limits (16 max on mobile) */}
+      {(participant.isCameraOff && !participant.isScreenSharing) ? (
+        <audio
+          ref={videoRef as any}
+          autoPlay
+          playsInline
+          muted={participant.isLocal}
+          className="hidden"
+        />
+      ) : (
+        <video
+          ref={videoRef as any}
+          autoPlay
+          playsInline
+          muted={participant.isLocal}
+          className={cn(
+            "w-full h-full",
+            isMain ? "object-contain bg-zinc-950" : "object-cover",
+            participant.isLocal && "scale-x-[-1]"
+          )}
+          style={participant.isHost ? {
+            // Boost lighting for admin heavily 
+            filter: 'brightness(1.25) contrast(1.1) saturate(1.15) drop-shadow(0 0 10px rgba(0,0,0,0.5))'
+          } : (!participant.isLocal ? {
+            filter: 'brightness(1.1) contrast(1.05) saturate(1.05)'
+          } : undefined)}
+        />
+      )}
 
       {/* Hand Raise Indicator */}
       {participant.isHandRaised && (
