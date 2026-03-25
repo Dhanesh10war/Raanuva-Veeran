@@ -81,8 +81,8 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
         </div>
       )}
 
-      {/* Media element — use audio when camera is off to prevent hitting browser hardware decoder limits (16 max on mobile) */}
-      {(participant.isCameraOff && !participant.isScreenSharing) ? (
+      {/* Media element — use audio when remote camera is off to prevent hitting browser hardware decoder limits (16 max on mobile) */}
+      {(participant.isCameraOff && !participant.isScreenSharing && !participant.isLocal) ? (
         <audio
           ref={videoRef as any}
           autoPlay
@@ -99,7 +99,8 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
           className={cn(
             "w-full h-full",
             isMain ? "object-contain bg-zinc-950" : "object-cover",
-            participant.isLocal && "scale-x-[-1]"
+            participant.isLocal && "scale-x-[-1]",
+            (participant.isCameraOff && !participant.isScreenSharing) && "invisible"
           )}
           style={participant.isHost ? {
             // Boost lighting for admin heavily 
