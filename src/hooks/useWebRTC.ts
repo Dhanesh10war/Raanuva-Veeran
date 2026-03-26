@@ -378,7 +378,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
           });
 
           syncTracksIntoStream(localMedia, [...localVideoTracks, ...localAudioTracks]);
-          syncTracksIntoStream(localScreenMedia, [...localScreenVideoTracks, ...localScreenAudioTracks]);
+          syncTracksIntoStream(localScreenMedia, [...localScreenVideoTracks, ...localScreenAudioTracks, ...localAudioTracks]);
 
           allParticipants.push({
             id: lkRoom.localParticipant.identity,
@@ -443,7 +443,7 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
             });
 
             syncTracksIntoStream(remoteMedia, [...remoteVideoTracks, ...remoteAudioTracks]);
-            syncTracksIntoStream(remoteScreenMedia, [...remoteScreenVideoTracks, ...remoteScreenAudioTracks]);
+            syncTracksIntoStream(remoteScreenMedia, [...remoteScreenVideoTracks, ...remoteScreenAudioTracks, ...remoteAudioTracks]);
 
             const wsState = syncedStatesRef.current[rp.identity];
 
