@@ -1,0 +1,9 @@
+{
+  "name": "Raanuva Veeran Spoken Hindi Academy",
+  "description": "Official video conferencing platform for Raanuva Veeran Spoken Hindi Academy, featuring high-quality virtual classrooms and interactive learning tools.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}

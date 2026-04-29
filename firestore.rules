@@ -1,0 +1,122 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: students
+// Document ID: studentId (UID)
+// Fields:
+//   - uid: string (required)
+//   - name: string (required)
+//   - email: string (required, email format)
+//   - registeredAt: string (optional, date-time format)
+//
+// Collection: meetings
+// Document ID: meetingId
+// Fields:
+//   - id: string (required)
+//   - hostUid: string (required)
+//   - hostName: string (optional)
+//   - title: string (optional)
+//   - link: string (required)
+//   - createdAt: string (required, date-time format)
+//   - status: string (optional, enum: ["active", "ended"])
+//
+// Collection: invites
+// Document ID: inviteId
+// Fields:
+//   - meetingId: string (required)
+//   - studentEmail: string (required, email format)
+//   - sentAt: string (required, date-time format)
+//   - status: string (optional, enum: ["sent", "failed"])
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "dhanesh10war@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['uid', 'name', 'email']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email);
+    }
+
+    function isValidMeeting(data) {
+      return data.keys().hasAll(['id', 'hostUid', 'link', 'createdAt']) &&
+             data.id is string && data.id.size() > 0 &&
+             data.hostUid is string && data.hostUid.size() > 0 &&
+             data.link is string && data.link.size() > 0 &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['meetingId', 'studentEmail', 'sentAt']) &&
+             data.meetingId is string && data.meetingId.size() > 0 &&
+             isValidEmail(data.studentEmail) &&
+             isValidDateString(data.sentAt);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /students/{studentId} {
+      // Students can read their own profile, admins can read all.
+      allow read: if isOwner(studentId) || isAdmin();
+      // Students can create their own profile, admins can manage.
+      allow create: if (isOwner(studentId) && isValidStudent(request.resource.data)) || isAdmin();
+      allow update: if (isOwner(studentId) && isValidStudent(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /meetings/{meetingId} {
+      // Anyone authenticated can read meetings (to join).
+      allow read: if isAuthenticated();
+      // Only admins (hosts) can create/update meetings.
+      allow create: if isAdmin() && isValidMeeting(request.resource.data);
+      allow update: if isAdmin() && isValidMeeting(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /invites/{inviteId} {
+      // Only admins can manage invites.
+      allow read, write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}
