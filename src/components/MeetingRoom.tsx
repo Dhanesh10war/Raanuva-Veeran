@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ControlBar } from './ControlBar';
 import { ParticipantTile } from './ParticipantTile';
 import { Sidebar } from './Sidebar';
@@ -6,6 +6,21 @@ import { useWebRTC } from '../hooks/useWebRTC';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Share2, Users, MessageSquare, Hand, ShieldCheck, Video, Mic } from 'lucide-react';
+
+const HiddenAudioPlayer = ({ participant }: { participant: any }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  
+  useEffect(() => {
+    if (audioRef.current && participant.stream) {
+       if (audioRef.current.srcObject !== participant.stream) {
+         audioRef.current.srcObject = participant.stream;
+         audioRef.current.play().catch(e => console.warn('Audio play failed', e));
+       }
+    }
+  }, [participant.stream]);
+  
+  return <audio ref={audioRef} autoPlay playsInline muted={participant.isLocal} className="hidden" />;
+};
 
 interface MeetingRoomProps {
   roomCode: string;
@@ -96,6 +111,10 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
   const otherParticipants = useMemo(() =>
     displayParticipants.filter(p => p.id !== activeSpeaker?.id),
     [displayParticipants, activeSpeaker]);
+
+  const hiddenParticipants = useMemo(() => {
+    return participants.filter(p => !displayParticipants.includes(p) && !p.isLocal);
+  }, [participants, displayParticipants]);
 
   return (
     <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden text-zinc-100">
@@ -278,6 +297,11 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({ roomCode, userName, is
         activeCameraId={activeCameraId}
         onSwitchCamera={switchCamera}
       />
+
+      {/* Hidden Audio Elements for non-displayed participants */}
+      {hiddenParticipants.map(p => (
+        <HiddenAudioPlayer key={p.id} participant={p} />
+      ))}
     </div>
   );
 };

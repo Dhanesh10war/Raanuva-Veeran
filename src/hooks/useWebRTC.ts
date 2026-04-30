@@ -512,11 +512,11 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
         lkRoom.on(RoomEvent.LocalTrackUnpublished, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantConnected, syncParticipants);
         lkRoom.on(RoomEvent.ParticipantDisconnected, syncParticipants);
-        // If we are a student, we must manually subscribe ONLY to the Admin's tracks.
+        // If we are a student, we must manually subscribe ONLY to the Admin's video tracks, but everyone's audio tracks.
         lkRoom.on(RoomEvent.TrackPublished, (pub: any, participant) => {
           if (!isAdmin) {
-            // Subscribe if the participant is a Teacher (Host)
-            if (participant.name?.includes('(Teacher)')) {
+            // Subscribe if the participant is a Teacher (Host) or if it's an audio track
+            if (participant.name?.includes('(Teacher)') || pub.kind === Track.Kind.Audio) {
               if (pub.setSubscribed) pub.setSubscribed(true);
             }
           }
