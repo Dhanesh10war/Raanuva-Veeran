@@ -19,39 +19,39 @@ const ParticipantTileComponent: React.FC<ParticipantTileProps> = ({ participant,
       : participant.stream;
 
     if (videoRef.current && activeStream) {
+      // Force re-assignment if reference is different, but always attempt play if unmuted
       if (videoRef.current.srcObject !== activeStream) {
         console.log(`Attaching stream to ${participant.name} tile. Tracks:`, activeStream.getTracks().map(t => t.kind));
         videoRef.current.srcObject = activeStream;
-        
-        const playVideo = async () => {
-          try {
-            if (videoRef.current) {
-              // Ensure muted for local, unmuted for remote
-              videoRef.current.muted = participant.isLocal;
+      }
+      
+      const playVideo = async () => {
+        try {
+          if (videoRef.current && !participant.isMuted && activeStream.getTracks().length > 0) {
+            // Ensure muted for local, unmuted for remote
+            videoRef.current.muted = participant.isLocal;
+            await videoRef.current.play();
+            setIsVideoPlaying(true);
+          }
+        } catch (e) {
+          console.warn("Autoplay blocked for:", participant.name, e);
+          setIsVideoPlaying(false);
+          
+          if (!participant.isLocal && videoRef.current) {
+            try {
+              videoRef.current.muted = true;
               await videoRef.current.play();
-              setIsVideoPlaying(true);
-            }
-          } catch (e) {
-            console.warn("Autoplay blocked for:", participant.name, e);
-            setIsVideoPlaying(false);
-            
-            // Fallback: try playing muted if unmuted failed (browsers allow muted autoplay)
-            if (!participant.isLocal && videoRef.current) {
-              try {
-                videoRef.current.muted = true;
-                await videoRef.current.play();
-                console.log("Started muted autoplay as fallback for:", participant.name);
-              } catch (err) {
-                console.error("Muted fallback also failed:", err);
-              }
+              console.log("Started muted autoplay as fallback for:", participant.name);
+            } catch (err) {
+              console.error("Muted fallback also failed:", err);
             }
           }
-        };
+        }
+      };
 
-        playVideo();
-      }
+      playVideo();
     }
-  }, [participant?.stream, participant?.screenShareStream, participant?.isScreenSharing, participant?.isCameraOff, participant?.isLocal]);
+  }, [participant?.stream, participant?.screenShareStream, participant?.isScreenSharing, participant?.isCameraOff, participant?.isLocal, participant?.isMuted, participant?.stream?.getTracks().length]);
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();

@@ -12,12 +12,17 @@ const HiddenAudioPlayer = ({ participant }: { participant: any }) => {
   
   useEffect(() => {
     if (audioRef.current && participant.stream) {
-       if (audioRef.current.srcObject !== participant.stream) {
+       // Force re-assignment if tracks change to wake up Safari/mobile browsers
+       const currentStream = audioRef.current.srcObject;
+       if (currentStream !== participant.stream) {
          audioRef.current.srcObject = participant.stream;
-         audioRef.current.play().catch(e => console.warn('Audio play failed', e));
+       }
+       // Always attempt to play when unmuted or a new track arrives
+       if (!participant.isMuted && participant.stream.getTracks().length > 0) {
+         audioRef.current.play().catch(e => console.warn('Hidden Audio play failed', e));
        }
     }
-  }, [participant.stream]);
+  }, [participant.stream, participant.isMuted, participant.stream?.getTracks().length]);
   
   return <audio ref={audioRef} autoPlay playsInline muted={participant.isLocal} className="hidden" />;
 };

@@ -527,14 +527,14 @@ export const useWebRTC = (room: string, userName: string, isAdmin: boolean = fal
 
         await lkRoom.connect(livekitUrl, token, { autoSubscribe: isAdmin });
 
-        // Subscribe to existing Teacher tracks if a student joins after the teacher
+        // Subscribe to existing Teacher tracks and all existing audio tracks if a student joins later
         if (!isAdmin) {
           lkRoom.remoteParticipants.forEach((p) => {
-            if (p.name?.includes('(Teacher)')) {
-              p.getTrackPublications().forEach((pub: any) => {
+            p.getTrackPublications().forEach((pub: any) => {
+              if (p.name?.includes('(Teacher)') || pub.kind === Track.Kind.Audio) {
                 if (pub.setSubscribed) pub.setSubscribed(true);
-              });
-            }
+              }
+            });
           });
         }
 
